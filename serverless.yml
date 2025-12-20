@@ -3,7 +3,7 @@ frameworkVersion: '4'
 
 provider:
   name: aws
-  runtime: nodejs18.x
+  runtime: nodejs20.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
 
@@ -12,6 +12,9 @@ provider:
     USER_POOL_ID: !Ref CognitoUserPool
     USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
     AWS_REGION: ${self:provider.region}
+
+  logs:
+    httpApi: true   # ✅ prevents manual log group conflicts
 
   iam:
     role:
@@ -24,6 +27,7 @@ provider:
             - cognito-idp:AdminGetUser
             - cognito-idp:GetUser
             - cognito-idp:GlobalSignOut
+            - cognito-idp:AdminRespondToAuthChallenge
           Resource: "*"
 
 build:
@@ -31,7 +35,7 @@ build:
     bundle: true
     minify: false
     sourcemap: true
-    target: node18
+    target: node20
     platform: node
     exclude:
       - aws-sdk
@@ -39,93 +43,55 @@ build:
 functions:
   signup:
     handler: src/functions/auth/signup.handler
-    description: User registration endpoint
     events:
       - http:
           path: auth/signup
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
+          cors: true
 
   login:
     handler: src/functions/auth/login.handler
-    description: User login endpoint
     events:
       - http:
           path: auth/login
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
+          cors: true
 
   refreshToken:
     handler: src/functions/auth/refreshToken.handler
-    description: Refresh access token
     events:
       - http:
           path: auth/refresh
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
+          cors: true
 
   logout:
     handler: src/functions/auth/logout.handler
-    description: User logout endpoint
     events:
       - http:
           path: auth/logout
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
+          cors: true
 
   verifyToken:
     handler: src/functions/auth/verifyToken.handler
-    description: Verify JWT token
     events:
       - http:
           path: auth/verify
           method: get
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
+          cors: true
 
 resources:
   Resources:
+
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
+      DeletionPolicy: Delete     # ✅ CRITICAL for DEV
       Properties:
         UserPoolName: pg-mgmt-user-pool-${self:provider.stage}
-        AutoVerifiedAttributes:
-          - email
         UsernameAttributes:
+          - email
+        AutoVerifiedAttributes:
           - email
         Policies:
           PasswordPolicy:
@@ -134,12 +100,6 @@ resources:
             RequireLowercase: true
             RequireNumbers: true
             RequireSymbols: true
-        Schema:
-          - Name: email
-            AttributeDataType: String
-            Mutable: false
-        EmailConfiguration:
-          EmailSendingAccount: COGNITO_DEFAULT
         AccountRecoverySetting:
           RecoveryMechanisms:
             - Name: verified_email
@@ -150,37 +110,27 @@ resources:
 
     CognitoUserPoolClient:
       Type: AWS::Cognito::UserPoolClient
+      DeletionPolicy: Delete     # ✅ prevents UPDATE_FAILED
       Properties:
         ClientName: pg-mgmt-client-${self:provider.stage}
         UserPoolId: !Ref CognitoUserPool
         GenerateSecret: false
         ExplicitAuthFlows:
           - ADMIN_NO_SRP_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
-        RefreshTokenValidity: 30
-        AccessTokenValidity: 1
-        IdTokenValidity: 1
-        TokenValidityUnits:
-          RefreshToken: days
-          AccessToken: hours
-          IdToken: hours
+          - USER_PASSWORD_AUTH
+          - REFRESH_TOKEN_AUTH
         PreventUserExistenceErrors: ENABLED
+        AccessTokenValidity: 60
+        IdTokenValidity: 60
+        RefreshTokenValidity: 30
+        TokenValidityUnits:
+          AccessToken: minutes
+          IdToken: minutes
+          RefreshToken: days
 
   Outputs:
     UserPoolId:
-      Description: Cognito User Pool ID
       Value: !Ref CognitoUserPool
-      Export:
-        Name: ${self:service}-${self:provider.stage}-UserPoolId
 
     UserPoolClientId:
-      Description: Cognito User Pool Client ID
       Value: !Ref CognitoUserPoolClient
-      Export:
-        Name: ${self:service}-${self:provider.stage}-UserPoolClientId
-
-    ApiGatewayUrl:
-      Description: API Gateway endpoint URL
-      Value: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
-      Export:
-        Name: ${self:service}-${self:provider.stage}-ApiUrl
