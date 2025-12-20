@@ -8,11 +8,10 @@ provider:
   stage: ${opt:stage, 'dev'}
 
   environment:
+    region: ${self:provider.region}
     STAGE: ${self:provider.stage}
     USER_POOL_ID: !Ref CognitoUserPool
     USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
-    AWS_REGION: ${self:provider.region}
-
   logs:
     httpApi: true   # ✅ prevents manual log group conflicts
 
