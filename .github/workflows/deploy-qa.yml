@@ -1,29 +1,49 @@
-name: Deploy PROD
+name: Deploy QA
 
 on:
-  workflow_dispatch:   # manual trigger only
+  push:
+    branches:
+      - qa
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: qa
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
-      - run: npm install
-      - run: npm install -g serverless
+      - name: Install dependencies
+        run: npm ci
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Install Serverless Framework
+        run: npm install -g serverless
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-south-1
 
-      - name: Deploy to PROD
+      - name: Deploy to QA
         env:
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
-        run: serverless deploy --stage prod
+        run: |
+          echo "Deploying to QA environment..."
+          serverless deploy --stage qa --verbose
+
+      - name: Post deployment info
+        if: success()
+        run: |
+          echo "✅ Deployment to QA successful!"
+          echo "Stage: qa"
+          echo "Region: ap-south-1"

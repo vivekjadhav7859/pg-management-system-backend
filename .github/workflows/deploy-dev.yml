@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - dev
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: dev
 
     steps:
       - name: Checkout code
@@ -17,11 +19,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Install Serverless
+      - name: Install Serverless Framework
         run: npm install -g serverless
 
       - name: Configure AWS credentials
@@ -29,9 +32,18 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-south-1
 
       - name: Deploy to DEV
         env:
-          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}      
-        run: serverless deploy --stage dev
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+        run: |
+          echo "Deploying to DEV environment..."
+          serverless deploy --stage dev --verbose
+
+      - name: Post deployment info
+        if: success()
+        run: |
+          echo "✅ Deployment to DEV successful!"
+          echo "Stage: dev"
+          echo "Region: ap-south-1"
