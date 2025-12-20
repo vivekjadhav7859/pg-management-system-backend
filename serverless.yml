@@ -6,7 +6,6 @@ provider:
   runtime: nodejs18.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
-  profile: pg-mgmt-${self:provider.stage}
 
   environment:
     STAGE: ${self:provider.stage}
