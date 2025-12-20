@@ -117,9 +117,7 @@ resources:
         GenerateSecret: false
         ExplicitAuthFlows:
           - ADMIN_NO_SRP_AUTH
-          - ALLOW_USER_PASSWORD_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
-
+          - USER_PASSWORD_AUTH
         PreventUserExistenceErrors: ENABLED
         AccessTokenValidity: 60
         IdTokenValidity: 60
