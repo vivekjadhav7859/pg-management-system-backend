@@ -137,7 +137,6 @@ resources:
         Schema:
           - Name: email
             AttributeDataType: String
-            Required: true
             Mutable: false
         EmailConfiguration:
           EmailSendingAccount: COGNITO_DEFAULT
