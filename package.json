@@ -27,11 +27,9 @@
   ],
   "author": "Your Name",
   "license": "MIT",
-  "dependencies": {
-    "aws-sdk": "^2.1691.0"
-  },
   "devDependencies": {
     "serverless": "^4.4.7",
+    "serverless-esbuild": "^1.56.1",
     "serverless-offline": "^14.3.3"
   },
   "engines": {

@@ -29,6 +29,19 @@ provider:
             - cognito-idp:AdminRespondToAuthChallenge
           Resource: "*"
 
+plugins:
+  - serverless-esbuild
+
+custom:
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: false
+    target: node18
+    platform: node
+    exclude:
+      - aws-sdk
+
 build:
   esbuild:
     bundle: true
@@ -132,3 +145,15 @@ resources:
 
     UserPoolClientId:
       Value: !Ref CognitoUserPoolClient
+package:
+  individually: true
+  patterns:
+    - '!node_modules/aws-sdk/**'
+    - '!node_modules/.prisma/**'
+    - '!node_modules/@aws-sdk/**'
+    - '!tests/**'
+    - '!docs/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!coverage/**'
+    - '!*.md'
