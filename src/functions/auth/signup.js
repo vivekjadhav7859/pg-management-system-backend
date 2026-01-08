@@ -1,10 +1,11 @@
 const { createUser } = require('../../services/cognito.service');
+const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateEmail, validatePassword, validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 
 exports.handler = async (event) => {
     try {
-        console.log('Signup request received:', { body: event.body });
+        console.log('Signup request received');
 
         // Parse request body
         const body = JSON.parse(event.body);
@@ -40,23 +41,62 @@ exports.handler = async (event) => {
             return response.error('Invalid user type. Must be tenant, owner, or admin', 400);
         }
 
-        // Create user in Cognito
-        const result = await createUser(sanitizedEmail, password);
+        // Check if user already exists in DynamoDB
+        const existingUser = await dynamoService.getUserByEmail(sanitizedEmail);
+        if (existingUser) {
+            return response.error('User with this email already exists', 409);
+        }
 
-        console.log('User created successfully:', result);
+        // Create user in Cognito with custom attributes
+        const cognitoUser = await createUser(
+            sanitizedEmail, 
+            password,
+            {
+                name: sanitizedName,
+                phone_number: sanitizedPhone,
+                userType: sanitizedUserType
+            }
+        );
+
+        console.log('Cognito user created:', cognitoUser.userId);
+
+        // Create user entry in DynamoDB
+        const dbUser = await dynamoService.createUser({
+            cognitoUserId: cognitoUser.userId,
+            email: sanitizedEmail,
+            name: sanitizedName,
+            phoneNumber: sanitizedPhone,
+            userType: sanitizedUserType
+        });
+
+        console.log('User created successfully in database:', dbUser.userId);
 
         return response.success({
             message: 'User registered successfully',
-            email: result.email,
-            userType: sanitizedUserType
+            user: {
+                userId: dbUser.userId,
+                email: dbUser.email,
+                name: dbUser.name,
+                phoneNumber: dbUser.phoneNumber,
+                userType: dbUser.userType,
+                status: dbUser.status,
+                createdAt: dbUser.createdAt
+            }
         }, 201);
 
     } catch (err) {
         console.error('Signup error:', err);
 
         // Handle specific error messages
-        const errorMessage = err.message || 'Signup failed';
-        const statusCode = err.message?.includes('already exists') ? 409 : 400;
+        let errorMessage = 'Signup failed';
+        let statusCode = 400;
+
+        if (err.message?.includes('already exists')) {
+            errorMessage = err.message;
+            statusCode = 409;
+        } else if (err.message) {
+            errorMessage = err.message;
+        }
 
         return response.error(errorMessage, statusCode);
     }

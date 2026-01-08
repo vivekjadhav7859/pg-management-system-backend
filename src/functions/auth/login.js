@@ -1,4 +1,5 @@
 const { loginUser } = require('../../services/cognito.service');
+const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateEmail, validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 
@@ -30,14 +31,43 @@ exports.handler = async (event) => {
 
         console.log('Login successful for user:', sanitizedEmail);
 
-        // Return tokens
+        // Get user details from DynamoDB
+        const dbUser = await dynamoService.getUserByEmail(sanitizedEmail);
+
+        if (!dbUser) {
+            console.warn('User authenticated but not found in database:', sanitizedEmail);
+            return response.error('User data not found', 404);
+        }
+
+        // Check if user account is active
+        if (dbUser.status === 'deleted' || dbUser.status === 'suspended') {
+            return response.error('Account is not active. Please contact support.', 403);
+        }
+
+        // Update last login timestamp
+        await dynamoService.updateLastLogin(dbUser.userId);
+
+        // Return tokens and user information
         return response.success({
             message: 'Login successful',
-            accessToken: authResult.AccessToken,
-            refreshToken: authResult.RefreshToken,
-            idToken: authResult.IdToken,
-            expiresIn: authResult.ExpiresIn,
-            tokenType: authResult.TokenType
+            tokens: {
+                accessToken: authResult.AccessToken,
+                refreshToken: authResult.RefreshToken,
+                idToken: authResult.IdToken,
+                expiresIn: authResult.ExpiresIn,
+                tokenType: authResult.TokenType
+            },
+            user: {
+                userId: dbUser.userId,
+                email: dbUser.email,
+                name: dbUser.name,
+                phoneNumber: dbUser.phoneNumber,
+                userType: dbUser.userType,
+                status: dbUser.status,
+                emailVerified: dbUser.emailVerified,
+                profileCompleted: dbUser.profileCompleted,
+                lastLoginAt: new Date().toISOString()
+            }
         });
 
     } catch (err) {

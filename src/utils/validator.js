@@ -1,102 +1,164 @@
 /**
  * Validate email format
  */
-module.exports.validateEmail = (email) => {
+exports.validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
+    
     if (!email) {
-        return { valid: false, message: 'Email is required' };
+        return {
+            valid: false,
+            message: 'Email is required'
+        };
     }
-
+    
     if (!emailRegex.test(email)) {
-        return { valid: false, message: 'Invalid email format' };
+        return {
+            valid: false,
+            message: 'Invalid email format'
+        };
     }
-
-    return { valid: true };
+    
+    return {
+        valid: true
+    };
 };
 
 /**
  * Validate password strength
  */
-module.exports.validatePassword = (password) => {
+exports.validatePassword = (password) => {
     if (!password) {
-        return { valid: false, message: 'Password is required' };
+        return {
+            valid: false,
+            message: 'Password is required'
+        };
     }
-
+    
     if (password.length < 8) {
-        return { valid: false, message: 'Password must be at least 8 characters long' };
+        return {
+            valid: false,
+            message: 'Password must be at least 8 characters long'
+        };
     }
-
-    // Check for at least one uppercase letter
+    
+    // Check for uppercase
     if (!/[A-Z]/.test(password)) {
-        return { valid: false, message: 'Password must contain at least one uppercase letter' };
+        return {
+            valid: false,
+            message: 'Password must contain at least one uppercase letter'
+        };
     }
-
-    // Check for at least one lowercase letter
+    
+    // Check for lowercase
     if (!/[a-z]/.test(password)) {
-        return { valid: false, message: 'Password must contain at least one lowercase letter' };
+        return {
+            valid: false,
+            message: 'Password must contain at least one lowercase letter'
+        };
     }
-
-    // Check for at least one number
+    
+    // Check for number
     if (!/\d/.test(password)) {
-        return { valid: false, message: 'Password must contain at least one number' };
+        return {
+            valid: false,
+            message: 'Password must contain at least one number'
+        };
     }
-
-    // Check for at least one special character
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-        return { valid: false, message: 'Password must contain at least one special character' };
+    
+    // Check for special character
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+        return {
+            valid: false,
+            message: 'Password must contain at least one special character'
+        };
     }
-
-    return { valid: true };
-};
-
-/**
- * Validate phone number (Indian format)
- */
-module.exports.validatePhone = (phone) => {
-    if (!phone) {
-        return { valid: false, message: 'Phone number is required' };
-    }
-
-    const phoneRegex = /^[6-9]\d{9}$/;
-
-    if (!phoneRegex.test(phone)) {
-        return { valid: false, message: 'Invalid phone number. Must be a 10-digit Indian number' };
-    }
-
-    return { valid: true };
+    
+    return {
+        valid: true
+    };
 };
 
 /**
  * Validate required fields
  */
-module.exports.validateRequiredFields = (data, requiredFields) => {
-    const missingFields = [];
-
-    requiredFields.forEach(field => {
+exports.validateRequiredFields = (data, requiredFields) => {
+    for (const field of requiredFields) {
         if (!data[field] || (typeof data[field] === 'string' && data[field].trim() === '')) {
-            missingFields.push(field);
+            return {
+                valid: false,
+                message: `${field} is required`
+            };
         }
-    });
-
-    if (missingFields.length > 0) {
-        return {
-            valid: false,
-            message: `Missing required fields: ${missingFields.join(', ')}`
-        };
     }
-
-    return { valid: true };
+    
+    return {
+        valid: true
+    };
 };
 
 /**
- * Sanitize input to prevent injection attacks
+ * Sanitize input to prevent XSS
  */
-module.exports.sanitizeInput = (input) => {
-    if (typeof input !== 'string') return input;
-
+exports.sanitizeInput = (input) => {
+    if (typeof input !== 'string') {
+        return input;
+    }
+    
     return input
-        .trim()
-        .replace(/[<>]/g, '') // Remove potential HTML tags
-        .slice(0, 500); // Limit length
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;')
+        .trim();
+};
+
+/**
+ * Validate phone number (optional, basic validation)
+ */
+exports.validatePhoneNumber = (phone) => {
+    if (!phone) {
+        return {
+            valid: true // Phone is optional
+        };
+    }
+    
+    // Basic phone number validation (10-15 digits)
+    const phoneRegex = /^\+?[\d\s\-()]{10,15}$/;
+    
+    if (!phoneRegex.test(phone)) {
+        return {
+            valid: false,
+            message: 'Invalid phone number format'
+        };
+    }
+    
+    return {
+        valid: true
+    };
+};
+
+/**
+ * Validate user type
+ */
+exports.validateUserType = (userType, allowedTypes = ['tenant', 'owner', 'admin']) => {
+    if (!userType) {
+        return {
+            valid: true,
+            defaultValue: 'tenant'
+        };
+    }
+    
+    if (!allowedTypes.includes(userType)) {
+        return {
+            valid: false,
+            message: `Invalid user type. Allowed types: ${allowedTypes.join(', ')}`
+        };
+    }
+    
+    return {
+        valid: true,
+        value: userType
+    };
 };

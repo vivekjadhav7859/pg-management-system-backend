@@ -1,135 +1,284 @@
-    const AWS = require('aws-sdk');
-    const config = require('../config/env');
-    
-    const dynamoDB = new AWS.DynamoDB.DocumentClient({
-        region: config.AWS_REGION
-    });
-    
-    const TABLE_NAME = config.DYNAMODB_TABLE;
-    
-    /**
-     * Save user data to DynamoDB
-     */
-    module.exports.saveUserToDB = async (userData) => {
-        const params = {
-            TableName: TABLE_NAME,
-            Item: {
-                ...userData,
-                pk: `USER#${userData.userId}`,
-                sk: `PROFILE#${userData.userId}`,
-            }
+const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
+
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+const USER_TABLE = process.env.USER_TABLE;
+
+/**
+ * Create user entry in DynamoDB
+ */
+exports.createUser = async (userData) => {
+    try {
+        const userId = uuidv4();
+        const timestamp = new Date().toISOString();
+
+        const item = {
+            userId: userId,
+            cognitoUserId: userData.cognitoUserId,
+            email: userData.email,
+            name: userData.name || null,
+            phoneNumber: userData.phoneNumber || null,
+            userType: userData.userType || 'tenant', // tenant, owner, admin
+            status: 'active',
+            emailVerified: true,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            
+            // Additional metadata
+            lastLoginAt: null,
+            profileCompleted: false,
+            
+            // GSI attributes for querying
+            emailLowerCase: userData.email.toLowerCase(),
+            userTypeIndex: userData.userType || 'tenant'
         };
-    
-        try {
-            await dynamoDB.put(params).promise();
-            return userData;
-        } catch (error) {
-            console.error('Error saving user to DynamoDB:', error);
-            throw new Error('Failed to save user data');
-        }
-    };
-    
-    /**
-     * Get user by userId
-     */
-    module.exports.getUserById = async (userId) => {
+
         const params = {
-            TableName: TABLE_NAME,
+            TableName: USER_TABLE,
+            Item: item,
+            ConditionExpression: 'attribute_not_exists(email)'
+        };
+
+        await dynamodb.put(params).promise();
+
+        return item;
+
+    } catch (error) {
+        console.error('Error creating user in DynamoDB:', error);
+        
+        if (error.code === 'ConditionalCheckFailedException') {
+            throw new Error('User with this email already exists in database');
+        }
+        
+        throw error;
+    }
+};
+
+/**
+ * Get user by userId
+ */
+exports.getUserById = async (userId) => {
+    try {
+        const params = {
+            TableName: USER_TABLE,
             Key: {
-                pk: `USER#${userId}`,
-                sk: `PROFILE#${userId}`,
+                userId: userId
             }
         };
-    
-        try {
-            const result = await dynamoDB.get(params).promise();
-            return result.Item || null;
-        } catch (error) {
-            console.error('Error getting user from DynamoDB:', error);
-            throw new Error('Failed to retrieve user data');
-        }
-    };
-    
-    /**
-     * Get user by email
-     */
-    module.exports.getUserByEmail = async (email) => {
+
+        const result = await dynamodb.get(params).promise();
+        
+        return result.Item || null;
+
+    } catch (error) {
+        console.error('Error getting user by ID:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get user by email
+ */
+exports.getUserByEmail = async (email) => {
+    try {
         const params = {
-            TableName: TABLE_NAME,
-            IndexName: 'email-index', // You'll need to create this GSI
-            KeyConditionExpression: 'email = :email',
+            TableName: USER_TABLE,
+            IndexName: 'EmailIndex',
+            KeyConditionExpression: 'emailLowerCase = :email',
             ExpressionAttributeValues: {
-                ':email': email
+                ':email': email.toLowerCase()
             }
         };
-    
-        try {
-            const result = await dynamoDB.query(params).promise();
-            return result.Items?.[0] || null;
-        } catch (error) {
-            console.error('Error querying user by email:', error);
-            throw new Error('Failed to retrieve user data');
-        }
-    };
-    
-    /**
-     * Update user data
-     */
-    module.exports.updateUser = async (userId, updates) => {
-        const updateExpression = [];
-        const expressionAttributeNames = {};
-        const expressionAttributeValues = {};
-    
-        Object.keys(updates).forEach((key, index) => {
-            updateExpression.push(`#attr${index} = :val${index}`);
-            expressionAttributeNames[`#attr${index}`] = key;
-            expressionAttributeValues[`:val${index}`] = updates[key];
-        });
-    
-        // Add updatedAt timestamp
-        updateExpression.push(`#updatedAt = :updatedAt`);
-        expressionAttributeNames['#updatedAt'] = 'updatedAt';
-        expressionAttributeValues[':updatedAt'] = new Date().toISOString();
-    
+
+        const result = await dynamodb.query(params).promise();
+        
+        return result.Items && result.Items.length > 0 ? result.Items[0] : null;
+
+    } catch (error) {
+        console.error('Error getting user by email:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get user by Cognito User ID
+ */
+exports.getUserByCognitoId = async (cognitoUserId) => {
+    try {
         const params = {
-            TableName: TABLE_NAME,
+            TableName: USER_TABLE,
+            IndexName: 'CognitoUserIdIndex',
+            KeyConditionExpression: 'cognitoUserId = :cognitoUserId',
+            ExpressionAttributeValues: {
+                ':cognitoUserId': cognitoUserId
+            }
+        };
+
+        const result = await dynamodb.query(params).promise();
+        
+        return result.Items && result.Items.length > 0 ? result.Items[0] : null;
+
+    } catch (error) {
+        console.error('Error getting user by Cognito ID:', error);
+        throw error;
+    }
+};
+
+/**
+ * Update user details
+ */
+exports.updateUser = async (userId, updates) => {
+    try {
+        const timestamp = new Date().toISOString();
+        
+        // Build update expression dynamically
+        let updateExpression = 'SET updatedAt = :updatedAt';
+        const expressionAttributeValues = {
+            ':updatedAt': timestamp
+        };
+        const expressionAttributeNames = {};
+
+        // Add fields to update
+        if (updates.name !== undefined) {
+            updateExpression += ', #name = :name';
+            expressionAttributeValues[':name'] = updates.name;
+            expressionAttributeNames['#name'] = 'name';
+        }
+
+        if (updates.phoneNumber !== undefined) {
+            updateExpression += ', phoneNumber = :phoneNumber';
+            expressionAttributeValues[':phoneNumber'] = updates.phoneNumber;
+        }
+
+        if (updates.status !== undefined) {
+            updateExpression += ', #status = :status';
+            expressionAttributeValues[':status'] = updates.status;
+            expressionAttributeNames['#status'] = 'status';
+        }
+
+        if (updates.profileCompleted !== undefined) {
+            updateExpression += ', profileCompleted = :profileCompleted';
+            expressionAttributeValues[':profileCompleted'] = updates.profileCompleted;
+        }
+
+        if (updates.lastLoginAt !== undefined) {
+            updateExpression += ', lastLoginAt = :lastLoginAt';
+            expressionAttributeValues[':lastLoginAt'] = updates.lastLoginAt;
+        }
+
+        const params = {
+            TableName: USER_TABLE,
             Key: {
-                pk: `USER#${userId}`,
-                sk: `PROFILE#${userId}`,
+                userId: userId
             },
-            UpdateExpression: `SET ${updateExpression.join(', ')}`,
-            ExpressionAttributeNames: expressionAttributeNames,
+            UpdateExpression: updateExpression,
             ExpressionAttributeValues: expressionAttributeValues,
             ReturnValues: 'ALL_NEW'
         };
-    
-        try {
-            const result = await dynamoDB.update(params).promise();
-            return result.Attributes;
-        } catch (error) {
-            console.error('Error updating user in DynamoDB:', error);
-            throw new Error('Failed to update user data');
+
+        if (Object.keys(expressionAttributeNames).length > 0) {
+            params.ExpressionAttributeNames = expressionAttributeNames;
         }
-    };
-    
-    /**
-     * Delete user
-     */
-    module.exports.deleteUser = async (userId) => {
+
+        const result = await dynamodb.update(params).promise();
+        
+        return result.Attributes;
+
+    } catch (error) {
+        console.error('Error updating user:', error);
+        throw error;
+    }
+};
+
+/**
+ * Update last login timestamp
+ */
+exports.updateLastLogin = async (userId) => {
+    try {
+        const timestamp = new Date().toISOString();
+
         const params = {
-            TableName: TABLE_NAME,
+            TableName: USER_TABLE,
             Key: {
-                pk: `USER#${userId}`,
-                sk: `PROFILE#${userId}`,
-            }
+                userId: userId
+            },
+            UpdateExpression: 'SET lastLoginAt = :lastLoginAt, updatedAt = :updatedAt',
+            ExpressionAttributeValues: {
+                ':lastLoginAt': timestamp,
+                ':updatedAt': timestamp
+            },
+            ReturnValues: 'NONE'
         };
-    
-        try {
-            await dynamoDB.delete(params).promise();
-            return { message: 'User deleted successfully' };
-        } catch (error) {
-            console.error('Error deleting user from DynamoDB:', error);
-            throw new Error('Failed to delete user');
+
+        await dynamodb.update(params).promise();
+
+    } catch (error) {
+        console.error('Error updating last login:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get all users by user type
+ */
+exports.getUsersByType = async (userType, limit = 50, lastEvaluatedKey = null) => {
+    try {
+        const params = {
+            TableName: USER_TABLE,
+            IndexName: 'UserTypeIndex',
+            KeyConditionExpression: 'userTypeIndex = :userType',
+            ExpressionAttributeValues: {
+                ':userType': userType
+            },
+            Limit: limit
+        };
+
+        if (lastEvaluatedKey) {
+            params.ExclusiveStartKey = lastEvaluatedKey;
         }
-    };
-    
+
+        const result = await dynamodb.query(params).promise();
+        
+        return {
+            users: result.Items || [],
+            lastEvaluatedKey: result.LastEvaluatedKey || null
+        };
+
+    } catch (error) {
+        console.error('Error getting users by type:', error);
+        throw error;
+    }
+};
+
+/**
+ * Delete user (soft delete by updating status)
+ */
+exports.deleteUser = async (userId) => {
+    try {
+        const timestamp = new Date().toISOString();
+
+        const params = {
+            TableName: USER_TABLE,
+            Key: {
+                userId: userId
+            },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
+            ExpressionAttributeValues: {
+                ':status': 'deleted',
+                ':updatedAt': timestamp
+            },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        const result = await dynamodb.update(params).promise();
+        
+        return result.Attributes;
+
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        throw error;
+    }
+};

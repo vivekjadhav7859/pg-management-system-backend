@@ -1,162 +1,213 @@
 const AWS = require('aws-sdk');
-const config = require('../config/env');
 
-const cognito = new AWS.CognitoIdentityServiceProvider({
-    region: config.AWS_REGION
-});
+const cognito = new AWS.CognitoIdentityServiceProvider();
+const USER_POOL_ID = process.env.USER_POOL_ID;
+const USER_POOL_CLIENT_ID = process.env.USER_POOL_CLIENT_ID;
 
 /**
- * Create a new user in Cognito
+ * Create a new user in Cognito with custom attributes
  */
-const createUser = async (email, password) => {
+exports.createUser = async (email, password, userAttributes = {}) => {
     try {
         // Create user in Cognito
-        await cognito.adminCreateUser({
-            UserPoolId: config.USER_POOL_ID,
+        const params = {
+            UserPoolId: USER_POOL_ID,
             Username: email,
+            TemporaryPassword: password,
             UserAttributes: [
-                { Name: 'email', Value: email },
-                { Name: 'email_verified', Value: 'true' }
+                {
+                    Name: 'email',
+                    Value: email
+                },
+                {
+                    Name: 'email_verified',
+                    Value: 'true'
+                }
             ],
-            MessageAction: 'SUPPRESS',
-        }).promise();
+            MessageAction: 'SUPPRESS' // Don't send welcome email
+        };
+
+        // Add custom attributes if provided
+        if (userAttributes.name) {
+            params.UserAttributes.push({
+                Name: 'name',
+                Value: userAttributes.name
+            });
+        }
+
+        if (userAttributes.phone_number) {
+            params.UserAttributes.push({
+                Name: 'phone_number',
+                Value: userAttributes.phone_number
+            });
+        }
+
+        // Add custom:userType attribute
+        if (userAttributes.userType) {
+            params.UserAttributes.push({
+                Name: 'custom:userType',
+                Value: userAttributes.userType
+            });
+        }
+
+        const createUserResponse = await cognito.adminCreateUser(params).promise();
 
         // Set permanent password
         await cognito.adminSetUserPassword({
-            UserPoolId: config.USER_POOL_ID,
+            UserPoolId: USER_POOL_ID,
             Username: email,
             Password: password,
-            Permanent: true,
+            Permanent: true
         }).promise();
 
         return {
-            success: true,
-            email
+            userId: createUserResponse.User.Username,
+            email: email,
+            userAttributes: createUserResponse.User.Attributes
         };
+
     } catch (error) {
-        // Handle specific Cognito errors
+        console.error('Error creating user in Cognito:', error);
+        
         if (error.code === 'UsernameExistsException') {
-            throw new Error('User already exists with this email');
+            throw new Error('User with this email already exists');
         }
-        if (error.code === 'InvalidPasswordException') {
-            throw new Error('Password does not meet requirements (min 8 chars, uppercase, lowercase, number, symbol)');
-        }
-        if (error.code === 'InvalidParameterException') {
-            throw new Error('Invalid email or password format');
-        }
+        
         throw error;
     }
 };
 
 /**
- * Login user and return tokens
+ * Login user and return authentication tokens
  */
-const loginUser = async (email, password) => {
+exports.loginUser = async (email, password) => {
     try {
-        const result = await cognito.adminInitiateAuth({
-            UserPoolId: config.USER_POOL_ID,
-            ClientId: config.USER_POOL_CLIENT_ID,
+        const params = {
             AuthFlow: 'ADMIN_NO_SRP_AUTH',
+            UserPoolId: USER_POOL_ID,
+            ClientId: USER_POOL_CLIENT_ID,
             AuthParameters: {
                 USERNAME: email,
-                PASSWORD: password,
-            },
-        }).promise();
+                PASSWORD: password
+            }
+        };
 
-        return result.AuthenticationResult;
+        const response = await cognito.adminInitiateAuth(params).promise();
+
+        return response.AuthenticationResult;
+
     } catch (error) {
-        if (error.code === 'NotAuthorizedException') {
-            throw new Error('Invalid email or password');
-        }
-        if (error.code === 'UserNotFoundException') {
-            throw new Error('User not found');
-        }
-        if (error.code === 'UserNotConfirmedException') {
-            throw new Error('User account is not confirmed');
-        }
+        console.error('Error logging in user:', error);
         throw error;
     }
 };
 
 /**
- * Verify JWT token
+ * Get user details from Cognito
  */
-const verifyToken = async (token) => {
+exports.getUserDetails = async (email) => {
     try {
-        const result = await cognito.getUser({
-            AccessToken: token
-        }).promise();
+        const params = {
+            UserPoolId: USER_POOL_ID,
+            Username: email
+        };
+
+        const response = await cognito.adminGetUser(params).promise();
+
+        // Convert attributes array to object
+        const attributes = {};
+        response.UserAttributes.forEach(attr => {
+            attributes[attr.Name] = attr.Value;
+        });
 
         return {
-            username: result.Username,
-            email: result.UserAttributes.find(attr => attr.Name === 'email')?.Value,
-            attributes: result.UserAttributes
+            userId: response.Username,
+            email: attributes.email,
+            name: attributes.name || null,
+            phoneNumber: attributes.phone_number || null,
+            userType: attributes['custom:userType'] || null,
+            emailVerified: attributes.email_verified === 'true',
+            enabled: response.Enabled,
+            userStatus: response.UserStatus,
+            createdAt: response.UserCreateDate,
+            lastModifiedAt: response.UserLastModifiedDate
         };
+
     } catch (error) {
-        throw new Error('Invalid or expired token');
+        console.error('Error getting user details:', error);
+        throw error;
     }
 };
 
 /**
- * Refresh access token
+ * Refresh authentication token
  */
-const refreshToken = async (refreshToken) => {
+exports.refreshToken = async (refreshToken) => {
     try {
-        const result = await cognito.adminInitiateAuth({
-            UserPoolId: config.USER_POOL_ID,
-            ClientId: config.USER_POOL_CLIENT_ID,
+        const params = {
             AuthFlow: 'REFRESH_TOKEN_AUTH',
+            UserPoolId: USER_POOL_ID,
+            ClientId: USER_POOL_CLIENT_ID,
             AuthParameters: {
-                REFRESH_TOKEN: refreshToken,
-            },
-        }).promise();
+                REFRESH_TOKEN: refreshToken
+            }
+        };
 
-        return result.AuthenticationResult;
+        const response = await cognito.adminInitiateAuth(params).promise();
+
+        return response.AuthenticationResult;
+
     } catch (error) {
-        throw new Error('Invalid or expired refresh token');
+        console.error('Error refreshing token:', error);
+        throw error;
     }
 };
 
 /**
- * Logout user (revoke tokens)
+ * Logout user (global sign out)
  */
-const logoutUser = async (accessToken) => {
+exports.logoutUser = async (accessToken) => {
     try {
-        await cognito.globalSignOut({
+        const params = {
             AccessToken: accessToken
-        }).promise();
+        };
 
-        return { message: 'Logged out successfully' };
+        await cognito.globalSignOut(params).promise();
+
     } catch (error) {
-        throw new Error('Logout failed');
+        console.error('Error logging out user:', error);
+        throw error;
     }
 };
 
 /**
- * Get user details by username
+ * Verify access token and return user info
  */
-const getUserDetails = async (username) => {
+exports.verifyToken = async (accessToken) => {
     try {
-        const result = await cognito.adminGetUser({
-            UserPoolId: config.USER_POOL_ID,
-            Username: username
-        }).promise();
+        const params = {
+            AccessToken: accessToken
+        };
+
+        const response = await cognito.getUser(params).promise();
+
+        // Convert attributes array to object
+        const attributes = {};
+        response.UserAttributes.forEach(attr => {
+            attributes[attr.Name] = attr.Value;
+        });
 
         return {
-            username: result.Username,
-            enabled: result.Enabled,
-            status: result.UserStatus,
-            attributes: result.UserAttributes
+            userId: response.Username,
+            email: attributes.email,
+            name: attributes.name || null,
+            phoneNumber: attributes.phone_number || null,
+            userType: attributes['custom:userType'] || null,
+            emailVerified: attributes.email_verified === 'true'
         };
+
     } catch (error) {
-        throw new Error('Failed to fetch user details');
+        console.error('Error verifying token:', error);
+        throw error;
     }
 };
-
-// Export for esbuild compatibility
-exports.createUser = createUser;
-exports.loginUser = loginUser;
-exports.verifyToken = verifyToken;
-exports.refreshToken = refreshToken;
-exports.logoutUser = logoutUser;
-exports.getUserDetails = getUserDetails;

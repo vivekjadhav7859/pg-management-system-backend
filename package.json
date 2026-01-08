@@ -23,6 +23,7 @@
     "aws",
     "lambda",
     "cognito",
+    "dynamodb",
     "pg-management"
   ],
   "author": "Your Name",
@@ -36,6 +37,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "aws-sdk": "^2.1693.0"
+    "aws-sdk": "^2.1693.0",
+    "uuid": "^9.0.1"
   }
 }
