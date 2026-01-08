@@ -42,13 +42,7 @@ exports.createUser = async (email, password, userAttributes = {}) => {
             });
         }
 
-        // Add custom:userType attribute
-        if (userAttributes.userType) {
-            params.UserAttributes.push({
-                Name: 'custom:userType',
-                Value: userAttributes.userType
-            });
-        }
+        // Note: userType is stored only in DynamoDB, not in Cognito
 
         const createUserResponse = await cognito.adminCreateUser(params).promise();
 
@@ -125,7 +119,6 @@ exports.getUserDetails = async (email) => {
             email: attributes.email,
             name: attributes.name || null,
             phoneNumber: attributes.phone_number || null,
-            userType: attributes['custom:userType'] || null,
             emailVerified: attributes.email_verified === 'true',
             enabled: response.Enabled,
             userStatus: response.UserStatus,
@@ -202,7 +195,6 @@ exports.verifyToken = async (accessToken) => {
             email: attributes.email,
             name: attributes.name || null,
             phoneNumber: attributes.phone_number || null,
-            userType: attributes['custom:userType'] || null,
             emailVerified: attributes.email_verified === 'true'
         };
 

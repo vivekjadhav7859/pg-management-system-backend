@@ -149,10 +149,6 @@ resources:
             AttributeDataType: String
             Required: false
             Mutable: true
-          - Name: userType
-            AttributeDataType: String
-            Required: false
-            Mutable: true
         Policies:
           PasswordPolicy:
             MinimumLength: 8
