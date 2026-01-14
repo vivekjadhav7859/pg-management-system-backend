@@ -140,13 +140,40 @@ exports.validatePhoneNumber = (phone) => {
 };
 
 /**
- * Validate user type
+ * Validate user type for PUBLIC signup (tenant and owner only)
+ * Admin users must be created through protected endpoint
  */
-exports.validateUserType = (userType, allowedTypes = ['tenant', 'owner', 'admin']) => {
+exports.validateUserType = (userType, allowedTypes = ['tenant', 'owner']) => {
     if (!userType) {
         return {
             valid: true,
             defaultValue: 'tenant'
+        };
+    }
+    
+    if (!allowedTypes.includes(userType)) {
+        return {
+            valid: false,
+            message: `Invalid user type. Allowed types: ${allowedTypes.join(', ')}`
+        };
+    }
+    
+    return {
+        valid: true,
+        value: userType
+    };
+};
+
+/**
+ * Validate user type for ADMIN operations (all roles including admin)
+ */
+exports.validateUserTypeAdmin = (userType) => {
+    const allowedTypes = ['tenant', 'owner', 'admin'];
+    
+    if (!userType) {
+        return {
+            valid: false,
+            message: 'User type is required'
         };
     }
     

@@ -55,6 +55,7 @@ build:
       - aws-sdk
 
 functions:
+  # PUBLIC ENDPOINTS
   signup:
     handler: src/functions/auth/signup.handler
     events:
@@ -109,6 +110,15 @@ functions:
       - http:
           path: auth/profile
           method: put
+          cors: true
+
+  # PROTECTED ADMIN ENDPOINTS
+  createAdmin:
+    handler: src/functions/admin/createAdmin.handler
+    events:
+      - http:
+          path: admin/create-user
+          method: post
           cors: true
 
 package:
