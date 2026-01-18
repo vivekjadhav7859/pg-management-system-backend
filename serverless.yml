@@ -12,6 +12,8 @@ provider:
     USER_POOL_ID: !Ref CognitoUserPool
     USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
     USER_TABLE: ${self:service}-users-${self:provider.stage}
+    PROPERTY_TABLE: ${self:service}-properties-${self:provider.stage}
+    ROOM_TABLE: ${self:service}-rooms-${self:provider.stage}
 
   logs:
     httpApi: true
@@ -43,6 +45,10 @@ provider:
           Resource:
             - !GetAtt UsersTable.Arn
             - !Sub "${UsersTable.Arn}/index/*"
+            - !GetAtt PropertiesTable.Arn
+            - !Sub "${PropertiesTable.Arn}/index/*"
+            - !GetAtt RoomsTable.Arn
+            - !Sub "${RoomsTable.Arn}/index/*"
 
 build:
   esbuild:
@@ -55,7 +61,7 @@ build:
       - aws-sdk
 
 functions:
-  # PUBLIC ENDPOINTS
+  # ============ AUTH ENDPOINTS ============
   signup:
     handler: src/functions/auth/signup.handler
     events:
@@ -112,13 +118,95 @@ functions:
           method: put
           cors: true
 
-  # PROTECTED ADMIN ENDPOINTS
+  # ============ ADMIN ENDPOINTS ============
   createAdmin:
     handler: src/functions/admin/createAdmin.handler
     events:
       - http:
           path: admin/create-user
           method: post
+          cors: true
+
+  # ============ PROPERTY MANAGEMENT ENDPOINTS ============
+  addProperty:
+    handler: src/functions/property/addProperty.handler
+    events:
+      - http:
+          path: properties
+          method: post
+          cors: true
+
+  getProperties:
+    handler: src/functions/property/getProperties.handler
+    events:
+      - http:
+          path: properties
+          method: get
+          cors: true
+
+  getPropertyById:
+    handler: src/functions/property/getPropertyById.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: get
+          cors: true
+
+  updateProperty:
+    handler: src/functions/property/updateProperty.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: put
+          cors: true
+
+  deleteProperty:
+    handler: src/functions/property/deleteProperty.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: delete
+          cors: true
+
+  # ============ ROOM MANAGEMENT ENDPOINTS ============
+  addRoom:
+    handler: src/functions/property/addRoom.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rooms
+          method: post
+          cors: true
+
+  getRooms:
+    handler: src/functions/property/getRooms.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rooms
+          method: get
+          cors: true
+
+  getRoomById:
+    handler: src/functions/property/getRoomById.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: get
+          cors: true
+
+  updateRoom:
+    handler: src/functions/property/updateRoom.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: put
+          cors: true
+
+  deleteRoom:
+    handler: src/functions/property/deleteRoom.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: delete
           cors: true
 
 package:
@@ -136,7 +224,7 @@ package:
 
 resources:
   Resources:
-    # Cognito User Pool
+    # ============ COGNITO USER POOL ============
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
       DeletionPolicy: Delete
@@ -176,7 +264,9 @@ resources:
           - USER_PASSWORD_AUTH
         PreventUserExistenceErrors: ENABLED
 
-    # DynamoDB Users Table
+    # ============ DYNAMODB TABLES ============
+    
+    # Users Table
     UsersTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: Delete
@@ -224,6 +314,86 @@ resources:
           - Key: Service
             Value: ${self:service}
 
+    # Properties Table
+    PropertiesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-properties-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: propertyId
+            AttributeType: S
+          - AttributeName: ownerIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: propertyId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: OwnerIdIndex
+            KeySchema:
+              - AttributeName: ownerIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Rooms Table
+    RoomsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-rooms-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: roomId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: roomId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
   Outputs:
     UserPoolId:
       Description: Cognito User Pool ID
@@ -243,8 +413,14 @@ resources:
       Export:
         Name: ${self:service}-UsersTable-${self:provider.stage}
     
-    UsersTableArn:
-      Description: DynamoDB Users Table ARN
-      Value: !GetAtt UsersTable.Arn
+    PropertiesTableName:
+      Description: DynamoDB Properties Table Name
+      Value: !Ref PropertiesTable
       Export:
-        Name: ${self:service}-UsersTableArn-${self:provider.stage}
+        Name: ${self:service}-PropertiesTable-${self:provider.stage}
+    
+    RoomsTableName:
+      Description: DynamoDB Rooms Table Name
+      Value: !Ref RoomsTable
+      Export:
+        Name: ${self:service}-RoomsTable-${self:provider.stage}
