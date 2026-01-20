@@ -284,7 +284,7 @@ functions:
     handler: src/functions/property/getRoomStatus.handler
     events:
       - http:
-         path: rooms/{roomId}/status
+          path: rooms/{roomId}/status
           method: get
           cors: true
 
