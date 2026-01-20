@@ -14,6 +14,11 @@ provider:
     USER_TABLE: ${self:service}-users-${self:provider.stage}
     PROPERTY_TABLE: ${self:service}-properties-${self:provider.stage}
     ROOM_TABLE: ${self:service}-rooms-${self:provider.stage}
+    TENANT_TABLE: ${self:service}-tenants-${self:provider.stage}
+    BED_ASSIGNMENT_TABLE: ${self:service}-bed-assignments-${self:provider.stage}
+    S3_BUCKET: ${self:service}-kyc-documents-${self:provider.stage}
+    RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
+    EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
 
   logs:
     httpApi: true
@@ -49,6 +54,23 @@ provider:
             - !Sub "${PropertiesTable.Arn}/index/*"
             - !GetAtt RoomsTable.Arn
             - !Sub "${RoomsTable.Arn}/index/*"
+            - !GetAtt TenantsTable.Arn
+            - !Sub "${TenantsTable.Arn}/index/*"
+            - !GetAtt BedAssignmentTable.Arn
+            - !Sub "${BedAssignmentTable.Arn}/index/*"
+            - !GetAtt RentPaymentsTable.Arn
+            - !Sub "${RentPaymentsTable.Arn}/index/*"
+            - !GetAtt ExpensesTable.Arn
+            - !Sub "${ExpensesTable.Arn}/index/*" 
+          
+        # S3 permissions
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource:
+            - !Sub "${KYCDocumentsBucket.Arn}/*"
 
 build:
   esbuild:
@@ -207,6 +229,130 @@ functions:
       - http:
           path: rooms/{roomId}
           method: delete
+          cors: true
+
+  # ============ TENANT MANAGEMENT ENDPOINTS ============
+  checkInTenant:
+    handler: src/functions/tenant/checkInTenant.handler
+    events:
+      - http:
+          path: tenants/check-in
+          method: post
+          cors: true
+      
+  getTenants:
+    handler: src/functions/tenant/getTenants.handler
+    events:
+      - http:
+          path: properties/{propertyId}/tenants
+          method: get
+          cors: true
+
+  getTenantById:
+    handler: src/functions/tenant/getTenantById.handler
+    events:
+      - http:
+          path: tenants/{tenantId}
+          method: get
+          cors: true
+
+  updateTenant:
+    handler: src/functions/tenant/updateTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}
+          method: put
+          cors: true
+
+  checkOutTenant:
+    handler: src/functions/tenant/checkOutTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/check-out
+          method: post
+          cors: true
+
+  uploadKYC:
+    handler: src/functions/tenant/uploadKYC.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/kyc/upload-url
+          method: post
+          cors: true
+
+  getRoomStatus:
+    handler: src/functions/property/getRoomStatus.handler
+    events:
+      - http:
+         path: rooms/{roomId}/status
+          method: get
+          cors: true
+
+  # ============ FINANCIAL MANAGEMENT - RENT COLLECTION ============
+  collectRent:
+    handler: src/functions/financial/collectRent.handler
+    events:
+      - http:
+          path: financial/rent/collect
+          method: post
+          cors: true
+
+  getRentPayments:
+    handler: src/functions/financial/getRentPayments.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rent-payments
+          method: get
+          cors: true
+
+  updatePayment:
+    handler: src/functions/financial/updatePayment.handler
+    events:
+      - http:
+          path: financial/payments/{paymentId}
+          method: put
+          cors: true
+
+  # ============ FINANCIAL MANAGEMENT - EXPENSE TRACKING ============
+  addExpense:
+    handler: src/functions/financial/addExpense.handler
+    events:
+      - http:
+          path: financial/expenses
+          method: post
+          cors: true
+
+  getExpenses:
+    handler: src/functions/financial/getExpenses.handler
+    events:
+      - http:
+          path: properties/{propertyId}/expenses
+          method: get
+          cors: true
+
+  updateExpense:
+    handler: src/functions/financial/updateExpense.handler
+    events:
+      - http:
+          path: financial/expenses/{expenseId}
+          method: put
+          cors: true
+
+  deleteExpense:
+    handler: src/functions/financial/deleteExpense.handler
+    events:
+      - http:
+          path: financial/expenses/{expenseId}
+          method: delete
+          cors: true
+
+  # ============ FINANCIAL MANAGEMENT - REPORTS ============
+  generateReport:
+    handler: src/functions/financial/generateReport.handler
+    events:
+      - http:
+          path: properties/{propertyId}/financial-report
+          method: get
           cors: true
 
 package:
@@ -393,6 +539,242 @@ resources:
             Value: ${self:provider.stage}
           - Key: Service
             Value: ${self:service}
+    
+    # Tenants Table
+    TenantsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-tenants-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenantId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: roomIdIndex
+            AttributeType: S
+          - AttributeName: userIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenantId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: RoomIdIndex
+            KeySchema:
+              - AttributeName: roomIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Bed Assignments Table
+    BedAssignmentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-bed-assignments-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: assignmentId
+            AttributeType: S
+          - AttributeName: roomIdIndex
+            AttributeType: S
+          - AttributeName: tenantIdIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: assignmentId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: RoomIdIndex
+            KeySchema:
+              - AttributeName: roomIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: TenantIdIndex
+            KeySchema:
+              - AttributeName: tenantIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # S3 Bucket for KYC Documents
+    KYCDocumentsBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Delete
+      Properties:
+        BucketName: ${self:service}-kyc-documents-${self:provider.stage}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - '*'
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+              AllowedHeaders:
+                - '*'
+              MaxAge: 3000
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteOldDocuments
+              Status: Enabled
+              ExpirationInDays: 365
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Rent Payments Table
+    RentPaymentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-rent-payments-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: paymentId
+            AttributeType: S
+          - AttributeName: tenantIdIndex
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: paymentMonthIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: paymentId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: TenantIdIndex
+            KeySchema:
+              - AttributeName: tenantIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: PaymentMonthIndex
+            KeySchema:
+              - AttributeName: paymentMonthIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Expenses Table
+    ExpensesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-expenses-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: expenseId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: expenseMonthIndex
+            AttributeType: S
+          - AttributeName: expenseTypeIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: expenseId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ExpenseMonthIndex
+            KeySchema:
+              - AttributeName: expenseMonthIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ExpenseTypeIndex
+            KeySchema:
+              - AttributeName: expenseTypeIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    
 
   Outputs:
     UserPoolId:
@@ -424,3 +806,33 @@ resources:
       Value: !Ref RoomsTable
       Export:
         Name: ${self:service}-RoomsTable-${self:provider.stage}
+
+    TenantsTableName:
+      Description: DynamoDB Tenants Table Name
+      Value: !Ref TenantsTable
+      Export:
+        Name: ${self:service}-TenantsTable-${self:provider.stage}
+    
+    BedAssignmentsTableName:
+      Description: DynamoDB Bed Assignments Table Name
+      Value: !Ref BedAssignmentsTable
+      Export:
+        Name: ${self:service}-BedAssignmentsTable-${self:provider.stage}
+    
+    KYCDocumentsBucketName:
+      Description: S3 Bucket for KYC Documents
+      Value: !Ref KYCDocumentsBucket
+      Export:
+        Name: ${self:service}-KYCBucket-${self:provider.stage}
+
+    RentPaymentsTableName:
+      Description: DynamoDB Rent Payments Table Name
+      Value: !Ref RentPaymentsTable
+      Export:
+        Name: ${self:service}-RentPaymentsTable-${self:provider.stage}
+    
+    ExpensesTableName:
+      Description: DynamoDB Expenses Table Name
+      Value: !Ref ExpensesTable
+      Export:
+        Name: ${self:service}-ExpensesTable-${self:provider.stage}
