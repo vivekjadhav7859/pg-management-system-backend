@@ -56,8 +56,8 @@ provider:
             - !Sub "${RoomsTable.Arn}/index/*"
             - !GetAtt TenantsTable.Arn
             - !Sub "${TenantsTable.Arn}/index/*"
-            - !GetAtt BedAssignmentTable.Arn
-            - !Sub "${BedAssignmentTable.Arn}/index/*"
+            - !GetAtt BedAssignmentsTable.Arn
+            - !Sub "${BedAssignmentsTable.Arn}/index/*"
             - !GetAtt RentPaymentsTable.Arn
             - !Sub "${RentPaymentsTable.Arn}/index/*"
             - !GetAtt ExpensesTable.Arn
