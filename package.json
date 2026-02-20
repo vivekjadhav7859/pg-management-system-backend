@@ -4,7 +4,9 @@
   "description": "PG Management System Backend with multi-environment support",
   "main": "handler.js",
   "scripts": {
-    "test": "echo \"No tests specified yet\" && exit 0",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "verify": "node scripts/verify-deployment.js",
+    "migrate": "node scripts/migrate-property-ownerid.js",
     "deploy:dev": "serverless deploy --stage dev",
     "deploy:qa": "serverless deploy --stage qa",
     "deploy:prod": "serverless deploy --stage prod",
