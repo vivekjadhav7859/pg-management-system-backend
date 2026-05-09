@@ -153,8 +153,9 @@ exports.updateProperty = async (propertyId, updates) => {
         }
 
         if (updates.rules !== undefined) {
-            updateExpression += ', rules = :rules';
+            updateExpression += ', #rules = :rules';
             expressionAttributeValues[':rules'] = updates.rules;
+            expressionAttributeNames['#rules'] = 'rules';
         }
 
         if (updates.images !== undefined) {
@@ -182,6 +183,7 @@ exports.updateProperty = async (propertyId, updates) => {
         if (Object.keys(expressionAttributeNames).length > 0) {
             params.ExpressionAttributeNames = expressionAttributeNames;
         }
+
 
         const result = await dynamodb.update(params).promise();
         return result.Attributes;
