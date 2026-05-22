@@ -58,7 +58,24 @@ exports.handler = async (event) => {
 
         // Build email content
         const tenantName = tenant.name || 'Tenant';
-        const roomNo = tenant.roomId || 'N/A';
+        
+        let roomNo = tenant.roomId || 'N/A';
+        try {
+            if (tenant.roomId) {
+                const roomParams = {
+                    TableName: process.env.ROOM_TABLE,
+                    Key: { roomId: tenant.roomId }
+                };
+                const dynamodb = new AWS.DynamoDB.DocumentClient();
+                const roomResult = await dynamodb.get(roomParams).promise();
+                if (roomResult.Item && roomResult.Item.roomNumber) {
+                    roomNo = roomResult.Item.roomNumber;
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching room:', err);
+        }
+
         const amount = payment ? payment.amount : tenant.rentAmount || 0;
         const dueDate = payment && payment.dueDate 
             ? new Date(payment.dueDate).toLocaleDateString('en-IN')
