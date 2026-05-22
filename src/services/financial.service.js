@@ -5,6 +5,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 const RENT_PAYMENT_TABLE = process.env.RENT_PAYMENT_TABLE;
 const EXPENSE_TABLE = process.env.EXPENSE_TABLE;
+const REMINDER_SETTINGS_TABLE = process.env.REMINDER_SETTINGS_TABLE;
 
 // ==================== RENT COLLECTION ====================
 
@@ -506,6 +507,83 @@ exports.getMonthlyFinancialReport = async (propertyId, month) => {
 
     } catch (error) {
         console.error('Error generating financial report:', error);
+        throw error;
+    }
+};
+
+// ==================== REMINDER SETTINGS ====================
+
+/**
+ * Get reminder settings for a property
+ */
+exports.getReminderSettings = async (propertyId) => {
+    try {
+        const params = {
+            TableName: REMINDER_SETTINGS_TABLE,
+            Key: { propertyId }
+        };
+
+        const result = await dynamodb.get(params).promise();
+        return result.Item || null;
+
+    } catch (error) {
+        console.error('Error getting reminder settings:', error);
+        throw error;
+    }
+};
+
+/**
+ * Create or update reminder settings for a property
+ */
+exports.updateReminderSettings = async (propertyId, settings) => {
+    try {
+        const timestamp = new Date().toISOString();
+
+        const item = {
+            propertyId: propertyId,
+            autoEnabled: settings.autoEnabled !== undefined ? settings.autoEnabled : true,
+            daysBefore: settings.daysBefore || 3,
+            daysAfter: settings.daysAfter || 2,
+            channels: settings.channels || ['email'],
+            updatedAt: timestamp
+        };
+
+        const params = {
+            TableName: REMINDER_SETTINGS_TABLE,
+            Item: item
+        };
+
+        await dynamodb.put(params).promise();
+        return item;
+
+    } catch (error) {
+        console.error('Error updating reminder settings:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get rent payments filtered by status
+ */
+exports.getRentPaymentsByStatus = async (propertyId, status) => {
+    try {
+        // Use StatusIndex GSI and filter by propertyId
+        const params = {
+            TableName: RENT_PAYMENT_TABLE,
+            IndexName: 'StatusIndex',
+            KeyConditionExpression: 'statusIndex = :status',
+            FilterExpression: 'propertyId = :propertyId',
+            ExpressionAttributeValues: {
+                ':status': status,
+                ':propertyId': propertyId
+            }
+        };
+
+        const result = await dynamodb.query(params).promise();
+        return result.Items || [];
+
+    } catch (error) {
+        console.error('Error getting payments by status:', error);
         throw error;
     }
 };

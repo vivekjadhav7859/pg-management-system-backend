@@ -19,6 +19,9 @@ provider:
     S3_BUCKET: ${self:service}-kyc-documents-${self:provider.stage}
     RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
     EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
+    REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
+    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
+    SES_REGION: ${self:provider.region}
 
   logs:
     httpApi: true
@@ -61,7 +64,9 @@ provider:
             - !GetAtt RentPaymentsTable.Arn
             - !Sub "${RentPaymentsTable.Arn}/index/*"
             - !GetAtt ExpensesTable.Arn
-            - !Sub "${ExpensesTable.Arn}/index/*" 
+            - !Sub "${ExpensesTable.Arn}/index/*"
+            - !GetAtt ReminderSettingsTable.Arn
+            - !Sub "${ReminderSettingsTable.Arn}/index/*"
           
         # S3 permissions
         - Effect: Allow
@@ -71,6 +76,13 @@ provider:
             - s3:DeleteObject
           Resource:
             - !Sub "${KYCDocumentsBucket.Arn}/*"
+        
+        # SES permissions for email reminders
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
 
 build:
   esbuild:
@@ -353,6 +365,31 @@ functions:
       - http:
           path: properties/{propertyId}/financial-report
           method: get
+          cors: true
+
+  # ============ REMINDER MANAGEMENT ============
+  sendReminder:
+    handler: src/functions/financial/sendReminder.handler
+    events:
+      - http:
+          path: financial/send-reminder
+          method: post
+          cors: true
+
+  getReminderSettings:
+    handler: src/functions/financial/getReminderSettings.handler
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings
+          method: get
+          cors: true
+
+  updateReminderSettings:
+    handler: src/functions/financial/updateReminderSettings.handler
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings
+          method: put
           cors: true
 
 package:
@@ -774,7 +811,24 @@ resources:
           - Key: Service
             Value: ${self:service}
 
-    
+    # Reminder Settings Table
+    ReminderSettingsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:service}-reminder-settings-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: propertyId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: propertyId
+            KeyType: HASH
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
 
   Outputs:
     UserPoolId:
@@ -836,3 +890,9 @@ resources:
       Value: !Ref ExpensesTable
       Export:
         Name: ${self:service}-ExpensesTable-${self:provider.stage}
+    
+    ReminderSettingsTableName:
+      Description: DynamoDB Reminder Settings Table Name
+      Value: !Ref ReminderSettingsTable
+      Export:
+        Name: ${self:service}-ReminderSettingsTable-${self:provider.stage}
