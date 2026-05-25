@@ -154,7 +154,7 @@ functions:
 
   # ============ ADMIN ENDPOINTS ============
   createAdmin:
-    handler: src/functions/admin/createAdmin.handler
+    handler: src/functions/auth/createAdmin.handler
     events:
       - http:
           path: admin/create-user
@@ -293,7 +293,7 @@ functions:
           cors: true
 
   getRoomStatus:
-    handler: src/functions/property/getRoomStatus.handler
+    handler: src/functions/tenant/getRoomStatus.handler
     events:
       - http:
           path: rooms/{roomId}/status

@@ -12,23 +12,48 @@ exports.handler = async (event) => {
         }
 
         const accessToken = authHeader.replace('Bearer ', '');
-        const cognitoUser = await verifyToken(accessToken);
-        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
 
-        if (!dbUser || dbUser.status !== 'active') {
-            return response.error('User not found or not active', 403);
+        // Verify token
+        let cognitoUser;
+        try {
+            cognitoUser = await verifyToken(accessToken);
+        } catch (tokenErr) {
+            console.error('Token verification failed:', tokenErr);
+            return response.error('Invalid or expired token', 401);
         }
 
-        const propertyId = event.pathParameters.propertyId;
+        if (!cognitoUser || !cognitoUser.email) {
+            return response.error('Unable to extract user from token', 401);
+        }
 
-        // Verify property ownership
+        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
+
+        if (!dbUser) {
+            return response.error('User not found', 404);
+        }
+
+        if (dbUser.status !== 'active') {
+            return response.error('Account is not active', 403);
+        }
+
+        const propertyId = event.pathParameters?.propertyId;
+        if (!propertyId) {
+            return response.error('Property ID is required', 400);
+        }
+
+        // Verify property exists
         const property = await propertyService.getPropertyById(propertyId);
         if (!property) {
             return response.error('Property not found', 404);
         }
 
-        if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
-            return response.error('You can only view tenants of your properties', 403);
+        // Allow: admin role OR the property owner
+        // Note: userType 'owner' can only see their own properties
+        const isAdmin = dbUser.userType === 'admin';
+        const isOwner = dbUser.userType === 'owner' && property.ownerId === dbUser.userId;
+
+        if (!isAdmin && !isOwner) {
+            return response.error('You can only view tenants of your own properties', 403);
         }
 
         const result = await tenantService.getTenantsByProperty(propertyId);
