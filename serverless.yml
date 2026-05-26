@@ -393,7 +393,6 @@ functions:
           cors: true
 
 package:
-  individually: true
   patterns:
     - '!node_modules/aws-sdk/**'
     - '!node_modules/.prisma/**'
@@ -404,6 +403,8 @@ package:
     - '!.github/**'
     - '!coverage/**'
     - '!*.md'
+    - '!.serverless/**'
+    - '!scripts/**'
 
 resources:
   Resources:
