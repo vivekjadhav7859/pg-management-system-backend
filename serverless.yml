@@ -393,25 +393,24 @@ functions:
           cors: true
 
 package:
+  individually: true
   patterns:
-    - '!node_modules/aws-sdk/**'
-    - '!node_modules/.prisma/**'
-    - '!node_modules/@aws-sdk/**'
+    - '!node_modules/**'
+    - '!.serverless/**'
+    - '!scripts/**'
     - '!tests/**'
     - '!docs/**'
     - '!.git/**'
     - '!.github/**'
     - '!coverage/**'
     - '!*.md'
-    - '!.serverless/**'
-    - '!scripts/**'
 
 resources:
   Resources:
     # ============ COGNITO USER POOL ============
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         UserPoolName: pg-mgmt-user-pool-${self:provider.stage}
         UsernameAttributes:
@@ -438,7 +437,7 @@ resources:
 
     CognitoUserPoolClient:
       Type: AWS::Cognito::UserPoolClient
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         ClientName: pg-mgmt-client-${self:provider.stage}
         UserPoolId: !Ref CognitoUserPool
@@ -453,7 +452,7 @@ resources:
     # Users Table
     UsersTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-users-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -501,7 +500,7 @@ resources:
     # Properties Table
     PropertiesTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-properties-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -541,7 +540,7 @@ resources:
     # Rooms Table
     RoomsTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-rooms-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -581,7 +580,7 @@ resources:
     # Tenants Table
     TenantsTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-tenants-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -637,7 +636,7 @@ resources:
     # Bed Assignments Table
     BedAssignmentsTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-bed-assignments-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -677,7 +676,7 @@ resources:
     # S3 Bucket for KYC Documents
     KYCDocumentsBucket:
       Type: AWS::S3::Bucket
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         BucketName: ${self:service}-kyc-documents-${self:provider.stage}
         CorsConfiguration:
@@ -711,7 +710,7 @@ resources:
     # Rent Payments Table
     RentPaymentsTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-rent-payments-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -767,7 +766,7 @@ resources:
     # Expenses Table
     ExpensesTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-expenses-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -815,7 +814,7 @@ resources:
     # Reminder Settings Table
     ReminderSettingsTable:
       Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
+      DeletionPolicy: Retain
       Properties:
         TableName: ${self:service}-reminder-settings-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
