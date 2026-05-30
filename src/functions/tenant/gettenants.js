@@ -13,7 +13,6 @@ exports.handler = async (event) => {
 
         const accessToken = authHeader.replace('Bearer ', '');
 
-        // Verify token
         let cognitoUser;
         try {
             cognitoUser = await verifyToken(accessToken);
@@ -41,14 +40,11 @@ exports.handler = async (event) => {
             return response.error('Property ID is required', 400);
         }
 
-        // Verify property exists
         const property = await propertyService.getPropertyById(propertyId);
         if (!property) {
             return response.error('Property not found', 404);
         }
 
-        // Allow: admin role OR the property owner
-        // Note: userType 'owner' can only see their own properties
         const isAdmin = dbUser.userType === 'admin';
         const isOwner = dbUser.userType === 'owner' && property.ownerId === dbUser.userId;
 

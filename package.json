@@ -18,7 +18,10 @@
     "logs:login": "serverless logs -f login --stage dev -t",
     "info:dev": "serverless info --stage dev",
     "info:qa": "serverless info --stage qa",
-    "info:prod": "serverless info --stage prod"
+    "info:prod": "serverless info --stage prod",
+    "prune:dev": "node scripts/prune-lambda-versions.js dev 5",
+    "prune:qa": "node scripts/prune-lambda-versions.js qa 5",
+    "prune:prod": "node scripts/prune-lambda-versions.js prod 5"
   },
   "keywords": [
     "serverless",
@@ -33,7 +36,8 @@
   "devDependencies": {
     "serverless": "^4.4.7",
     "serverless-esbuild": "^1.56.1",
-    "serverless-offline": "^14.3.3"
+    "serverless-offline": "^14.3.3",
+    "serverless-prune-plugin": "^2.1.0"
   },
   "engines": {
     "node": ">=18.0.0"

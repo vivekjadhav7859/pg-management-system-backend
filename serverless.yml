@@ -1,6 +1,14 @@
 service: pg-management-backend
 frameworkVersion: '4'
 
+plugins:
+  - serverless-prune-plugin
+
+custom:
+  prune:
+    automatic: true
+    number: 5
+
 provider:
   name: aws
   runtime: nodejs20.x
