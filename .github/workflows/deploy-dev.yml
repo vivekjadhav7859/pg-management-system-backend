@@ -41,6 +41,9 @@ jobs:
           echo "Deploying to DEV environment..."
           serverless deploy --stage dev --verbose
 
+      - name: Repair broken Lambda bundles
+        run: node scripts/verify-lambdas.js --stage dev
+
       - name: Post deployment info
         if: success()
         run: |

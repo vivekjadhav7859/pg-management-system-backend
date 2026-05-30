@@ -6,6 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "verify": "node scripts/verify-deployment.js",
+    "verify:lambdas": "node scripts/verify-lambdas.js --stage dev",
+    "fix:lambdas:dev": "node scripts/verify-lambdas.js --stage dev",
     "migrate": "node scripts/migrate-property-ownerid.js",
     "deploy:dev": "serverless deploy --stage dev",
     "deploy:qa": "serverless deploy --stage qa",
