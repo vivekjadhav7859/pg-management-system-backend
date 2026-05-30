@@ -99,7 +99,20 @@ function resolveBuiltFile(fn) {
     return fromPackage;
   }
 
-  const sourceEntry = path.join(__dirname, '..', fn.src);
+  let sourceEntry = path.join(__dirname, '..', fn.src);
+  if (!fs.existsSync(sourceEntry)) {
+    const dir = path.dirname(sourceEntry);
+    const expectedBase = path.basename(sourceEntry);
+    if (fs.existsSync(dir)) {
+      const match = fs.readdirSync(dir).find(
+        (file) => file.toLowerCase() === expectedBase.toLowerCase()
+      );
+      if (match) {
+        sourceEntry = path.join(dir, match);
+        console.warn(`  ⚠️  Using ${match} (fix git filename casing to ${expectedBase})`);
+      }
+    }
+  }
   if (!fs.existsSync(sourceEntry)) {
     console.error(`  ✗ Source not found: ${sourceEntry}`);
     return null;
