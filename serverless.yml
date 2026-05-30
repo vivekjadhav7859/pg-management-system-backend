@@ -20,6 +20,7 @@ provider:
     RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
     EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
     REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
+    KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
 
@@ -77,12 +78,20 @@ provider:
           Resource:
             - !Sub "${KYCDocumentsBucket.Arn}/*"
         
-        # SES permissions for email reminders
+        # SES permissions for email reminders (kept for backward compat)
         - Effect: Allow
           Action:
             - ses:SendEmail
             - ses:SendRawEmail
           Resource: "*"
+        
+        # KMS permissions for SMTP credential encryption
+        - Effect: Allow
+          Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:GenerateDataKey
+          Resource: !GetAtt SmtpCredentialsKey.Arn
 
 build:
   esbuild:
@@ -370,9 +379,19 @@ functions:
   # ============ REMINDER MANAGEMENT ============
   sendReminder:
     handler: src/functions/financial/sendReminder.handler
+    timeout: 15
     events:
       - http:
           path: financial/send-reminder
+          method: post
+          cors: true
+
+  testSmtpCredentials:
+    handler: src/functions/financial/testCredentials.handler
+    timeout: 15
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings/test
           method: post
           cors: true
 
@@ -830,6 +849,29 @@ resources:
           - Key: Service
             Value: ${self:service}
 
+    # ============ KMS KEY FOR SMTP CREDENTIALS ============
+    SmtpCredentialsKey:
+      Type: AWS::KMS::Key
+      DeletionPolicy: Retain
+      Properties:
+        Description: KMS key for encrypting owner SMTP credentials
+        EnableKeyRotation: true
+        KeyPolicy:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: EnableIAMUserPermissions
+              Effect: Allow
+              Principal:
+                AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+              Action: "kms:*"
+              Resource: "*"
+
+    SmtpCredentialsKeyAlias:
+      Type: AWS::KMS::Alias
+      Properties:
+        AliasName: alias/pg-management-smtp-${self:provider.stage}
+        TargetKeyId: !Ref SmtpCredentialsKey
+
   Outputs:
     UserPoolId:
       Description: Cognito User Pool ID
@@ -896,3 +938,9 @@ resources:
       Value: !Ref ReminderSettingsTable
       Export:
         Name: ${self:service}-ReminderSettingsTable-${self:provider.stage}
+
+    SmtpCredentialsKeyId:
+      Description: KMS Key ID for SMTP credential encryption
+      Value: !Ref SmtpCredentialsKey
+      Export:
+        Name: ${self:service}-SmtpCredentialsKey-${self:provider.stage}

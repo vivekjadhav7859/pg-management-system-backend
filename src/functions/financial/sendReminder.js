@@ -1,13 +1,21 @@
 const AWS = require('aws-sdk');
+const nodemailer = require('nodemailer');
 const { verifyToken } = require('../../services/cognito.service');
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const financialService = require('../../services/financial.service');
+const { decryptSecret } = require('../../utils/crypto');
 const response = require('../../utils/response');
 
-const ses = new AWS.SES({ region: process.env.SES_REGION || 'ap-south-1' });
-
+/**
+ * POST /financial/send-reminder
+ * 
+ * Sends rent reminder/receipt emails to tenants using the owner's
+ * BYO-SMTP configuration (stored encrypted in DynamoDB).
+ * 
+ * Replaces the previous AWS SES implementation.
+ */
 exports.handler = async (event) => {
     try {
         const authHeader = event.headers.Authorization || event.headers.authorization;
@@ -30,25 +38,78 @@ exports.handler = async (event) => {
         const body = JSON.parse(event.body);
         const { tenantId, paymentId, type } = body;
 
+        console.log('sendReminder requested for tenantId:', tenantId, 'paymentId:', paymentId);
+
         if (!tenantId) {
+            console.log('Failed: tenantId is missing');
             return response.error('tenantId is required', 400);
         }
 
         // Get tenant details
         const tenant = await tenantService.getTenantById(tenantId);
         if (!tenant) {
+            console.log('Failed: tenant not found', tenantId);
             return response.error('Tenant not found', 404);
         }
 
         // Verify property ownership
         const property = await propertyService.getPropertyById(tenant.propertyId);
         if (!property) {
+            console.log('Failed: property not found', tenant.propertyId);
             return response.error('Property not found', 404);
         }
 
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
+            console.log('Failed: not owner of property', property.propertyId);
             return response.error('You can only send reminders to your tenants', 403);
         }
+
+        // ===== BYO-SMTP: Fetch owner's email configuration =====
+        const reminderSettings = await financialService.getReminderSettings(property.propertyId);
+        
+        if (!reminderSettings || !reminderSettings.emailConfig) {
+            console.log('Failed: emailConfig not found for property', property.propertyId);
+            return response.error(
+                'Email is not configured. Please set up your SMTP credentials in the Reminders page first.',
+                400
+            );
+        }
+
+        const emailConfig = reminderSettings.emailConfig;
+
+        // Decrypt the SMTP password
+        let smtpPassword;
+        try {
+            smtpPassword = await decryptSecret(emailConfig.encryptedPassword);
+        } catch (decryptErr) {
+            console.error('Failed to decrypt SMTP password:', decryptErr.message);
+            return response.error('Failed to decrypt email credentials. Please reconfigure your SMTP settings.', 500);
+        }
+
+        // Build nodemailer transport
+        let transportConfig;
+        if (emailConfig.provider === 'gmail') {
+            transportConfig = {
+                service: 'gmail',
+                auth: { user: emailConfig.user, pass: smtpPassword }
+            };
+        } else if (emailConfig.provider === 'outlook') {
+            transportConfig = {
+                service: 'hotmail',
+                auth: { user: emailConfig.user, pass: smtpPassword }
+            };
+        } else {
+            // Custom SMTP
+            const smtpPort = emailConfig.port || 587;
+            transportConfig = {
+                host: emailConfig.host,
+                port: smtpPort,
+                secure: smtpPort === 465,
+                auth: { user: emailConfig.user, pass: smtpPassword }
+            };
+        }
+
+        const transporter = nodemailer.createTransport(transportConfig);
 
         // Get payment details if paymentId provided
         let payment = null;
@@ -160,40 +221,23 @@ exports.handler = async (event) => {
             `;
         }
 
-        // Send email via SES
+        // Send email via nodemailer (BYO-SMTP)
         const emailResult = { sent: false, error: null };
         
         if (tenant.email) {
             try {
-                const emailParams = {
-                    Destination: {
-                        ToAddresses: [tenant.email]
-                    },
-                    Message: {
-                        Body: {
-                            Html: {
-                                Charset: 'UTF-8',
-                                Data: htmlBody
-                            },
-                            Text: {
-                                Charset: 'UTF-8',
-                                Data: `Dear ${tenantName}, your rent of ₹${amount.toLocaleString('en-IN')} for Room ${roomNo} at ${property.propertyName} is ${reminderType === 'overdue' ? 'overdue' : 'due on ' + dueDate}. Please pay on time.`
-                            }
-                        },
-                        Subject: {
-                            Charset: 'UTF-8',
-                            Data: subject
-                        }
-                    },
-                    Source: process.env.SES_FROM_EMAIL || 'noreply@pgmanagement.com'
-                };
-
-                await ses.sendEmail(emailParams).promise();
+                await transporter.sendMail({
+                    from: `"${property.propertyName}" <${emailConfig.user}>`,
+                    to: tenant.email,
+                    subject: subject,
+                    html: htmlBody,
+                    text: `Dear ${tenantName}, your rent of ₹${amount.toLocaleString('en-IN')} for Room ${roomNo} at ${property.propertyName} is ${reminderType === 'overdue' ? 'overdue' : 'due on ' + dueDate}. Please pay on time.`
+                });
                 emailResult.sent = true;
-                console.log(`Email reminder sent to ${tenant.email}`);
-            } catch (sesError) {
-                console.error('SES send error:', sesError);
-                emailResult.error = sesError.message;
+                console.log(`Email reminder sent to ${tenant.email} via ${emailConfig.provider} SMTP`);
+            } catch (smtpError) {
+                console.error('SMTP send error:', smtpError.message);
+                emailResult.error = smtpError.message;
             }
         } else {
             emailResult.error = 'No email address on file for tenant';

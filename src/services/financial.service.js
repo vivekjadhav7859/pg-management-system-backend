@@ -548,6 +548,17 @@ exports.updateReminderSettings = async (propertyId, settings) => {
             updatedAt: timestamp
         };
 
+        // Persist emailConfig if provided (already encrypted by the handler)
+        if (settings.emailConfig) {
+            item.emailConfig = {
+                provider: settings.emailConfig.provider,
+                user: settings.emailConfig.user,
+                encryptedPassword: settings.emailConfig.encryptedPassword,
+                host: settings.emailConfig.host || null,
+                port: settings.emailConfig.port || null
+            };
+        }
+
         const params = {
             TableName: REMINDER_SETTINGS_TABLE,
             Item: item
