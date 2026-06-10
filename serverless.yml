@@ -1,13 +1,6 @@
 service: pg-management-backend
 frameworkVersion: '4'
 
-plugins:
-  - serverless-prune-plugin
-
-custom:
-  prune:
-    automatic: true
-    number: 5
 
 provider:
   name: aws
@@ -325,6 +318,23 @@ functions:
           path: financial/rent/collect
           method: post
           cors: true
+
+  # Generates monthly rent bills on 1st of each month (due 5th)
+  # Also callable manually via POST /financial/generate-bills
+  generateMonthlyBills:
+    handler: src/functions/financial/generateMonthlyBills.handler
+    timeout: 60
+    events:
+      - http:
+          path: financial/generate-bills
+          method: post
+          cors: true
+      - schedule:
+          # Runs at 00:01 AM IST (18:31 UTC previous day) on the 1st of every month
+          rate: cron(31 18 L * ? *)
+          enabled: true
+          input:
+            source: "scheduled"
 
   getRentPayments:
     handler: src/functions/financial/getRentPayments.handler

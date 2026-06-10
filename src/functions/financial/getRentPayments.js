@@ -31,13 +31,37 @@ exports.handler = async (event) => {
             return response.error('You can only view payments of your properties', 403);
         }
 
-        const result = await financialService.getRentPaymentsByProperty(propertyId);
+        // Optional ?month=YYYY-MM filter
+        const month = event.queryStringParameters?.month;
+
+        let payments;
+        if (month && /^\d{4}-\d{2}$/.test(month)) {
+            // Filter by specific month using the PaymentMonthIndex GSI
+            payments = await financialService.getRentPaymentsByMonth(propertyId, month);
+        } else {
+            // Return all payments for this property (default behaviour)
+            const result = await financialService.getRentPaymentsByProperty(propertyId);
+            payments = result.payments;
+        }
+
+        // Auto-upgrade 'pending' → 'overdue' for bills past the 5th (in-memory only, not persisted here)
+        const today = new Date();
+        payments = payments.map(p => {
+            if (p.paymentStatus === 'pending' && p.dueDate) {
+                const due = new Date(p.dueDate);
+                if (today > due) {
+                    return { ...p, paymentStatus: 'overdue' };
+                }
+            }
+            return p;
+        });
 
         return response.success({
             message: 'Rent payments retrieved successfully',
-            payments: result.payments,
-            count: result.payments.length,
-            propertyId: propertyId
+            payments,
+            count: payments.length,
+            propertyId,
+            month: month || null
         });
 
     } catch (err) {
