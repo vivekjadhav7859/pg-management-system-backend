@@ -21,6 +21,7 @@ provider:
     RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
     EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
     REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
+    NOTIFICATION_TABLE: ${self:service}-notifications-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
@@ -69,6 +70,8 @@ provider:
             - !Sub "${ExpensesTable.Arn}/index/*"
             - !GetAtt ReminderSettingsTable.Arn
             - !Sub "${ReminderSettingsTable.Arn}/index/*"
+            - !GetAtt NotificationsTable.Arn
+            - !Sub "${NotificationsTable.Arn}/index/*"
           
         # S3 permissions
         - Effect: Allow
@@ -629,6 +632,59 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  # ============ SEARCH & NOTIFICATIONS ============
+  globalSearch:
+    handler: src/functions/search/globalSearch.handler
+    events:
+      - http:
+          path: search
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getNotifications:
+    handler: src/functions/notifications/getNotifications.handler
+    events:
+      - http:
+          path: notifications
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  markNotificationRead:
+    handler: src/functions/notifications/markRead.handler
+    events:
+      - http:
+          path: notifications/{id}/read
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  markAllNotificationsRead:
+    handler: src/functions/notifications/markAllRead.handler
+    events:
+      - http:
+          path: notifications/read-all
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
 package:
   individually: true
   patterns:
@@ -1067,6 +1123,46 @@ resources:
           - Key: Service
             Value: ${self:service}
 
+    # Notifications Table
+    NotificationsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-notifications-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: userIdIndex
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
     # ============ KMS KEY FOR SMTP CREDENTIALS ============
     SmtpCredentialsKey:
       Type: AWS::KMS::Key
@@ -1156,6 +1252,12 @@ resources:
       Value: !Ref ReminderSettingsTable
       Export:
         Name: ${self:service}-ReminderSettingsTable-${self:provider.stage}
+
+    NotificationsTableName:
+      Description: DynamoDB Notifications Table Name
+      Value: !Ref NotificationsTable
+      Export:
+        Name: ${self:service}-NotificationsTable-${self:provider.stage}
 
     SmtpCredentialsKeyId:
       Description: KMS Key ID for SMTP credential encryption
