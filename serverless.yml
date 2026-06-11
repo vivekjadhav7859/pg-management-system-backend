@@ -685,6 +685,33 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  markNotificationUnread:
+    handler: src/functions/notifications/markUnread.handler
+    events:
+      - http:
+          path: notifications/{id}/unread
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteNotification:
+    handler: src/functions/notifications/deleteNotification.handler
+    events:
+      - http:
+          path: notifications/{id}
+          method: delete
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+
 package:
   individually: true
   patterns:

@@ -97,3 +97,36 @@ exports.markAllRead = async (userId) => {
     await Promise.all(updates);
     return unreadItems.length;
 };
+
+exports.markUnread = async (notificationId) => {
+  const params = {
+    TableName: TABLE_NAME,
+    Key: {
+      id: notificationId
+    },
+    UpdateExpression: 'SET #read = :readVal',
+    ExpressionAttributeNames: {
+      '#read': 'read'
+    },
+    ExpressionAttributeValues: {
+      ':readVal': false
+    },
+    ReturnValues: 'ALL_NEW'
+  };
+
+  const result = await dynamodb.update(params).promise();
+  return result.Attributes;
+};
+
+exports.deleteNotification = async (notificationId) => {
+  const params = {
+    TableName: TABLE_NAME,
+    Key: {
+      id: notificationId
+    }
+  };
+
+  await dynamodb.delete(params).promise();
+  return { id: notificationId };
+};
+
