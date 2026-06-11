@@ -1,4 +1,4 @@
-const { verifyToken } = require('../../services/cognito.service');
+
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
@@ -6,29 +6,9 @@ const response = require('../../utils/response');
 
 exports.handler = async (event) => {
     try {
-        const authHeader = event.headers.Authorization || event.headers.authorization;
-        if (!authHeader) {
-            return response.error('Authorization header is required', 401);
-        }
-
-        const accessToken = authHeader.replace('Bearer ', '');
-
-        let cognitoUser;
-        try {
-            cognitoUser = await verifyToken(accessToken);
-        } catch (tokenErr) {
-            console.error('Token verification failed:', tokenErr);
-            return response.error('Invalid or expired token', 401);
-        }
-
-        if (!cognitoUser || !cognitoUser.email) {
-            return response.error('Unable to extract user from token', 401);
-        }
-
-        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
-
+        const dbUser = event.requestContext?.authorizer;
         if (!dbUser) {
-            return response.error('User not found', 404);
+            return response.error('Unauthorized', 401);
         }
 
         if (dbUser.status !== 'active') {

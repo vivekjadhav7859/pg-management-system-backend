@@ -1,6 +1,6 @@
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
-const { verifyToken } = require('../../services/cognito.service');
+
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
@@ -13,17 +13,9 @@ exports.handler = async (event) => {
     try {
         console.log('Check-in tenant request received');
 
-        const authHeader = event.headers.Authorization || event.headers.authorization;
-        if (!authHeader) {
-            return response.error('Authorization header is required', 401);
-        }
-
-        const accessToken = authHeader.replace('Bearer ', '');
-        const cognitoUser = await verifyToken(accessToken);
-        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
-
-        if (!dbUser || dbUser.status !== 'active') {
-            return response.error('User not found or not active', 403);
+        const dbUser = event.requestContext?.authorizer;
+        if (!dbUser) {
+            return response.error('Unauthorized', 401);
         }
 
         // Only owners and admins can check-in tenants
@@ -194,6 +186,26 @@ exports.handler = async (event) => {
             }
         } catch (statusErr) {
             console.warn('Non-critical: failed to update room status', statusErr.message);
+        }
+
+        // Auto-create pending rent record for the check-in month (non-critical, outside transaction)
+        try {
+            const financialService = require('../../services/financial.service');
+            const checkInMonth = checkInDate ? checkInDate.slice(0, 7) : timestamp.slice(0, 7);
+            
+            await financialService.createRentPayment({
+                tenantId: tenantId,
+                propertyId: propertyId,
+                roomId: roomId,
+                amount: rentAmount,
+                paymentMonth: checkInMonth,
+                dueDate: checkInDate || timestamp.slice(0, 10),
+                paymentStatus: 'pending',
+                notes: 'Auto-generated rent record from check-in'
+            });
+            console.log('Pending rent record auto-created for tenant:', tenantId);
+        } catch (rentErr) {
+            console.warn('Non-critical: failed to auto-create rent record', rentErr.message);
         }
 
         console.log('Tenant checked-in successfully (atomic):', tenantId);
