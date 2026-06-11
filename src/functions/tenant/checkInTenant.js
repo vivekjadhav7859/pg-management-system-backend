@@ -1,9 +1,13 @@
+const AWS = require('aws-sdk');
+const { v4: uuidv4 } = require('uuid');
 const { verifyToken } = require('../../services/cognito.service');
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+
+const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 exports.handler = async (event) => {
     try {
@@ -83,8 +87,13 @@ exports.handler = async (event) => {
             return response.error('User is already checked-in to a property', 400);
         }
 
-        // Create tenant entry
-        const tenant = await tenantService.createTenant({
+        // ── Build all items for the atomic transaction ──
+        const tenantId = uuidv4();
+        const assignmentId = uuidv4();
+        const timestamp = new Date().toISOString();
+
+        const tenantItem = {
+            tenantId,
             userId,
             propertyId,
             roomId,
@@ -93,52 +102,136 @@ exports.handler = async (event) => {
             email: sanitizeInput(email),
             phone: sanitizeInput(phone),
             emergencyContact: emergencyContact || {},
+            kycDocuments: {},
+            kycStatus: 'pending',
             checkInDate,
+            checkOutDate: null,
             rentAmount,
             securityDeposit,
             depositPaid: depositPaid || false,
             depositAmount: depositAmount || 0,
-            depositDate: depositDate || null
-        });
+            depositDate: depositDate || null,
+            status: 'active',
+            tenancyStatus: 'ongoing',
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            // GSI attributes
+            propertyIdIndex: propertyId,
+            roomIdIndex: roomId,
+            userIdIndex: userId,
+            statusIndex: 'active'
+        };
 
-        // Create bed assignment
-        await tenantService.assignBed({
-            tenantId: tenant.tenantId,
+        const assignmentItem = {
+            assignmentId,
+            tenantId,
             propertyId,
             roomId,
             bedNumber,
-            assignedDate: checkInDate
-        });
+            assignedDate: checkInDate || timestamp,
+            releasedDate: null,
+            status: 'assigned',
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            // GSI attributes
+            roomIdIndex: roomId,
+            tenantIdIndex: tenantId
+        };
 
-        // Update room occupancy
-        await propertyService.updateRoomOccupancy(roomId, 1);
+        // ── Execute all 4 writes atomically via TransactWriteItems ──
+        await dynamodb.transactWrite({
+            TransactItems: [
+                // 1. Create tenant record
+                {
+                    Put: {
+                        TableName: process.env.TENANT_TABLE,
+                        Item: tenantItem,
+                        ConditionExpression: 'attribute_not_exists(tenantId)'
+                    }
+                },
+                // 2. Create bed assignment record
+                {
+                    Put: {
+                        TableName: process.env.BED_ASSIGNMENT_TABLE,
+                        Item: assignmentItem,
+                        ConditionExpression: 'attribute_not_exists(assignmentId)'
+                    }
+                },
+                // 3. Update room occupancy (+1 occupied, -1 available)
+                {
+                    Update: {
+                        TableName: process.env.ROOM_TABLE,
+                        Key: { roomId },
+                        UpdateExpression: 'SET occupiedBeds = occupiedBeds + :one, availableBeds = availableBeds - :one, updatedAt = :ts',
+                        ExpressionAttributeValues: {
+                            ':one': 1,
+                            ':ts': timestamp,
+                            ':zero': 0
+                        },
+                        ConditionExpression: 'availableBeds > :zero'
+                    }
+                },
+                // 4. Update property occupancy (+1 occupied, -1 available)
+                {
+                    Update: {
+                        TableName: process.env.PROPERTY_TABLE,
+                        Key: { propertyId },
+                        UpdateExpression: 'SET occupiedBeds = occupiedBeds + :one, availableBeds = availableBeds - :one, updatedAt = :ts',
+                        ExpressionAttributeValues: {
+                            ':one': 1,
+                            ':ts': timestamp
+                        }
+                    }
+                }
+            ]
+        }).promise();
 
-        // Update property occupancy
-        await propertyService.updatePropertyOccupancy(propertyId, 1);
+        // Update room status if now fully occupied (non-critical, outside transaction)
+        try {
+            const updatedRoom = await propertyService.getRoomById(roomId);
+            if (updatedRoom && updatedRoom.availableBeds === 0) {
+                await propertyService.updateRoom(roomId, { status: 'occupied' });
+            }
+        } catch (statusErr) {
+            console.warn('Non-critical: failed to update room status', statusErr.message);
+        }
 
-        console.log('Tenant checked-in successfully:', tenant.tenantId);
+        console.log('Tenant checked-in successfully (atomic):', tenantId);
 
         return response.success({
             message: 'Tenant checked-in successfully',
             tenant: {
-                tenantId: tenant.tenantId,
-                userId: tenant.userId,
-                propertyId: tenant.propertyId,
-                roomId: tenant.roomId,
-                bedNumber: tenant.bedNumber,
-                name: tenant.name,
-                email: tenant.email,
-                phone: tenant.phone,
-                checkInDate: tenant.checkInDate,
-                rentAmount: tenant.rentAmount,
-                securityDeposit: tenant.securityDeposit,
-                status: tenant.status,
-                createdAt: tenant.createdAt
+                tenantId: tenantItem.tenantId,
+                userId: tenantItem.userId,
+                propertyId: tenantItem.propertyId,
+                roomId: tenantItem.roomId,
+                bedNumber: tenantItem.bedNumber,
+                name: tenantItem.name,
+                email: tenantItem.email,
+                phone: tenantItem.phone,
+                checkInDate: tenantItem.checkInDate,
+                rentAmount: tenantItem.rentAmount,
+                securityDeposit: tenantItem.securityDeposit,
+                status: tenantItem.status,
+                createdAt: tenantItem.createdAt
             }
         }, 201);
 
     } catch (err) {
         console.error('Check-in tenant error:', err);
+
+        // Handle TransactWriteItems-specific errors
+        if (err.code === 'TransactionCanceledException') {
+            const reasons = (err.CancellationReasons || [])
+                .map((r, i) => r.Code !== 'None' ? `Step ${i + 1}: ${r.Code}` : null)
+                .filter(Boolean);
+            console.error('Transaction cancelled reasons:', reasons);
+            return response.error(
+                'Check-in failed due to a conflict — bed may have been taken. Please retry.',
+                409
+            );
+        }
+
         return response.error('Failed to check-in tenant', 500);
     }
 };
