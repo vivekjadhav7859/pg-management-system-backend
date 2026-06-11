@@ -13,21 +13,6 @@ provider:
     USER_POOL_ID: !Ref CognitoUserPool
     USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
     USER_TABLE: ${self:service}-users-${self:provider.stage}
-service: pg-management-backend
-frameworkVersion: '4'
-
-
-provider:
-  name: aws
-  runtime: nodejs20.x
-  region: ap-south-1
-  stage: ${opt:stage, 'dev'}
-
-  environment:
-    STAGE: ${self:provider.stage}
-    USER_POOL_ID: !Ref CognitoUserPool
-    USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
-    USER_TABLE: ${self:service}-users-${self:provider.stage}
     PROPERTY_TABLE: ${self:service}-properties-${self:provider.stage}
     ROOM_TABLE: ${self:service}-rooms-${self:provider.stage}
     TENANT_TABLE: ${self:service}-tenants-${self:provider.stage}
@@ -36,7 +21,6 @@ provider:
     RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
     EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
     REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
-    NOTIFICATION_TABLE: ${self:service}-notifications-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
@@ -85,8 +69,6 @@ provider:
             - !Sub "${ExpensesTable.Arn}/index/*"
             - !GetAtt ReminderSettingsTable.Arn
             - !Sub "${ReminderSettingsTable.Arn}/index/*"
-            - !GetAtt NotificationsTable.Arn
-            - !Sub "${NotificationsTable.Arn}/index/*"
           
         # S3 permissions
         - Effect: Allow
@@ -125,6 +107,547 @@ build:
 functions:
   authorizer:
     handler: src/functions/auth/authorizer.handler
+  # ============ AUTH ENDPOINTS ============
+  signup:
+    handler: src/functions/auth/signup.handler
+    events:
+      - http:
+          path: auth/signup
+          method: post
+          cors: true
+
+  login:
+    handler: src/functions/auth/login.handler
+    events:
+      - http:
+          path: auth/login
+          method: post
+          cors: true
+
+  refreshToken:
+    handler: src/functions/auth/refreshToken.handler
+    events:
+      - http:
+          path: auth/refresh
+          method: post
+          cors: true
+
+  logout:
+    handler: src/functions/auth/logout.handler
+    events:
+      - http:
+          path: auth/logout
+          method: post
+          cors: true
+
+  verifyToken:
+    handler: src/functions/auth/verifyToken.handler
+    events:
+      - http:
+          path: auth/verify
+          method: get
+          cors: true
+
+  getProfile:
+    handler: src/functions/auth/getProfile.handler
+    events:
+      - http:
+          path: auth/profile
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateProfile:
+    handler: src/functions/auth/updateProfile.handler
+    events:
+      - http:
+          path: auth/profile
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ ADMIN ENDPOINTS ============
+  createAdmin:
+    handler: src/functions/auth/createAdmin.handler
+    events:
+      - http:
+          path: admin/create-user
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ PROPERTY MANAGEMENT ENDPOINTS ============
+  addProperty:
+    handler: src/functions/property/addProperty.handler
+    events:
+      - http:
+          path: properties
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getProperties:
+    handler: src/functions/property/getProperties.handler
+    events:
+      - http:
+          path: properties
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getPropertyById:
+    handler: src/functions/property/getPropertyById.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateProperty:
+    handler: src/functions/property/updateProperty.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteProperty:
+    handler: src/functions/property/deleteProperty.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: delete
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ ROOM MANAGEMENT ENDPOINTS ============
+  addRoom:
+    handler: src/functions/property/addRoom.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rooms
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRooms:
+    handler: src/functions/property/getRooms.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rooms
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRoomById:
+    handler: src/functions/property/getRoomById.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateRoom:
+    handler: src/functions/property/updateRoom.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteRoom:
+    handler: src/functions/property/deleteRoom.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: delete
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ TENANT MANAGEMENT ENDPOINTS ============
+  checkInTenant:
+    handler: src/functions/tenant/checkInTenant.handler
+    events:
+      - http:
+          path: tenants/check-in
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+      
+  getTenants:
+    handler: src/functions/tenant/getTenants.handler
+    events:
+      - http:
+          path: properties/{propertyId}/tenants
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getTenantById:
+    handler: src/functions/tenant/getTenantById.handler
+    events:
+      - http:
+          path: tenants/{tenantId}
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateTenant:
+    handler: src/functions/tenant/updateTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  checkOutTenant:
+    handler: src/functions/tenant/checkOutTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/check-out
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  uploadKYC:
+    handler: src/functions/tenant/uploadKYC.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/kyc/upload-url
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRoomStatus:
+    handler: src/functions/tenant/getRoomStatus.handler
+    events:
+      - http:
+          path: rooms/{roomId}/status
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ FINANCIAL MANAGEMENT - RENT COLLECTION ============
+  collectRent:
+    handler: src/functions/financial/collectRent.handler
+    events:
+      - http:
+          path: financial/rent/collect
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # Generates monthly rent bills on 1st of each month (due 5th)
+  # Also callable manually via POST /financial/generate-bills
+  generateMonthlyBills:
+    handler: src/functions/financial/generateMonthlyBills.handler
+    timeout: 60
+    events:
+      - http:
+          path: financial/generate-bills
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+      - schedule:
+          # Runs at 00:01 AM IST (18:31 UTC previous day) on the 1st of every month
+          rate: cron(31 18 L * ? *)
+          enabled: true
+          input:
+            source: "scheduled"
+
+  getRentPayments:
+    handler: src/functions/financial/getRentPayments.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rent-payments
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updatePayment:
+    handler: src/functions/financial/updatePayment.handler
+    events:
+      - http:
+          path: financial/payments/{paymentId}
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ FINANCIAL MANAGEMENT - EXPENSE TRACKING ============
+  addExpense:
+    handler: src/functions/financial/addExpense.handler
+    events:
+      - http:
+          path: financial/expenses
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getExpenses:
+    handler: src/functions/financial/getExpenses.handler
+    events:
+      - http:
+          path: properties/{propertyId}/expenses
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateExpense:
+    handler: src/functions/financial/updateExpense.handler
+    events:
+      - http:
+          path: financial/expenses/{expenseId}
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteExpense:
+    handler: src/functions/financial/deleteExpense.handler
+    events:
+      - http:
+          path: financial/expenses/{expenseId}
+          method: delete
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ FINANCIAL MANAGEMENT - REPORTS ============
+  generateReport:
+    handler: src/functions/financial/generateReport.handler
+    events:
+      - http:
+          path: properties/{propertyId}/financial-report
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ REMINDER MANAGEMENT ============
+  sendReminder:
+    handler: src/functions/financial/sendReminder.handler
+    timeout: 15
+    events:
+      - http:
+          path: financial/send-reminder
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  testSmtpCredentials:
+    handler: src/functions/financial/testCredentials.handler
+    timeout: 15
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings/test
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getReminderSettings:
+    handler: src/functions/financial/getReminderSettings.handler
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateReminderSettings:
+    handler: src/functions/financial/updateReminderSettings.handler
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings
+          method: put
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!.serverless/**'
+    - '!scripts/**'
+    - '!tests/**'
+    - '!docs/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!coverage/**'
+    - '!*.md'
+
+resources:
+  Resources:
+    # ============ COGNITO USER POOL ============
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      DeletionPolicy: Retain
       Properties:
         UserPoolName: pg-mgmt-user-pool-${self:provider.stage}
         UsernameAttributes:
