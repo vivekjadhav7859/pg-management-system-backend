@@ -18,7 +18,7 @@ exports.handler = async (event) => {
             return response.error('Property not found', 404);
         }
 
-        if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
+        if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin' && dbUser.userType !== 'tenant') {
             return response.error('You can only view payments of your properties', 403);
         }
 
@@ -33,6 +33,10 @@ exports.handler = async (event) => {
             // Return all payments for this property (default behaviour)
             const result = await financialService.getRentPaymentsByProperty(propertyId);
             payments = result.payments;
+        }
+
+        if (dbUser.userType === 'tenant') {
+            payments = payments.filter(p => p.tenantIdIndex === dbUser.userId);
         }
 
         // Auto-upgrade 'pending' → 'overdue' for bills past the 5th (in-memory only, not persisted here)

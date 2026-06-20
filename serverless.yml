@@ -22,6 +22,7 @@ provider:
     EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
     REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
     NOTIFICATION_TABLE: ${self:service}-notifications-${self:provider.stage}
+    COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
@@ -72,6 +73,8 @@ provider:
             - !Sub "${ReminderSettingsTable.Arn}/index/*"
             - !GetAtt NotificationsTable.Arn
             - !Sub "${NotificationsTable.Arn}/index/*"
+            - !GetAtt ComplaintsTable.Arn
+            - !Sub "${ComplaintsTable.Arn}/index/*"
           
         # S3 permissions
         - Effect: Allow
@@ -711,6 +714,45 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  # ============ COMPLAINTS MANAGEMENT ============
+  createComplaint:
+    handler: src/functions/complaints/createComplaint.handler
+    events:
+      - http:
+          path: properties/{propertyId}/complaints
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getComplaints:
+    handler: src/functions/complaints/getComplaints.handler
+    events:
+      - http:
+          path: properties/{propertyId}/complaints
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateComplaintStatus:
+    handler: src/functions/complaints/updateComplaintStatus.handler
+    events:
+      - http:
+          path: properties/{propertyId}/complaints/{complaintId}/status
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
 
 package:
   individually: true
@@ -1190,6 +1232,54 @@ resources:
           - Key: Service
             Value: ${self:service}
 
+    # Complaints Table
+    ComplaintsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-complaints-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: complaintId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: tenantIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: complaintId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: TenantIdIndex
+            KeySchema:
+              - AttributeName: tenantIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
     # ============ KMS KEY FOR SMTP CREDENTIALS ============
     SmtpCredentialsKey:
       Type: AWS::KMS::Key
@@ -1285,6 +1375,12 @@ resources:
       Value: !Ref NotificationsTable
       Export:
         Name: ${self:service}-NotificationsTable-${self:provider.stage}
+
+    ComplaintsTableName:
+      Description: DynamoDB Complaints Table Name
+      Value: !Ref ComplaintsTable
+      Export:
+        Name: ${self:service}-ComplaintsTable-${self:provider.stage}
 
     SmtpCredentialsKeyId:
       Description: KMS Key ID for SMTP credential encryption

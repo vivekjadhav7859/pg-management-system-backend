@@ -130,3 +130,17 @@ exports.deleteNotification = async (notificationId) => {
   return { id: notificationId };
 };
 
+// Phase 4.1: WhatsApp Channel Integration Stub
+exports.sendWhatsAppMessage = async (phoneNumber, templateId, parameters = {}) => {
+  try {
+    console.log(`[WhatsApp] Sending message to ${phoneNumber} using template ${templateId}`);
+    // Implementation for Twilio/WATI API goes here
+    // const payload = { to: phoneNumber, type: 'template', template: { name: templateId, language: { code: 'en' }, components: [...] } };
+    // await axios.post(WHATSAPP_API_URL, payload, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } });
+    
+    return { success: true, messageId: uuidv4() };
+  } catch (error) {
+    console.error('[WhatsApp] Error sending message:', error);
+    return { success: false, error: error.message };
+  }
+};

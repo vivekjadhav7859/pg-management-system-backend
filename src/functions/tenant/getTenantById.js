@@ -20,7 +20,7 @@ exports.handler = async (event) => {
 
         // Verify property ownership
         const property = await propertyService.getPropertyById(tenant.propertyId);
-        if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
+        if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin' && dbUser.userId !== tenantId) {
             return response.error('You can only view tenants of your properties', 403);
         }
 
