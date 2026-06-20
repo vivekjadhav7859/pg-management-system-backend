@@ -23,6 +23,7 @@ provider:
     REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
     NOTIFICATION_TABLE: ${self:service}-notifications-${self:provider.stage}
     COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
+    INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
@@ -75,6 +76,8 @@ provider:
             - !Sub "${NotificationsTable.Arn}/index/*"
             - !GetAtt ComplaintsTable.Arn
             - !Sub "${ComplaintsTable.Arn}/index/*"
+            - !GetAtt PropertyInviteCodesTable.Arn
+            - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
           
         # S3 permissions
         - Effect: Allow
@@ -754,6 +757,67 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  # ============ TENANT PORTAL / INVITE CODE ENDPOINTS ============
+  generateInviteCode:
+    handler: src/functions/property/generateInviteCode.handler
+    events:
+      - http:
+          path: properties/{propertyId}/invite-code
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getInviteCode:
+    handler: src/functions/property/getInviteCode.handler
+    events:
+      - http:
+          path: properties/{propertyId}/invite-code
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  validateInviteCode:
+    handler: src/functions/property/validateInviteCode.handler
+    events:
+      - http:
+          path: invite-code/validate
+          method: post
+          cors: true
+
+  linkTenantProperty:
+    handler: src/functions/tenant/linkTenantProperty.handler
+    events:
+      - http:
+          path: tenant/link-property
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getTenantDashboard:
+    handler: src/functions/tenant/getTenantDashboard.handler
+    events:
+      - http:
+          path: tenant/dashboard
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
 package:
   individually: true
   patterns:
@@ -1280,6 +1344,31 @@ resources:
           - Key: Service
             Value: ${self:service}
 
+    # Property Invite Codes Table
+    PropertyInviteCodesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-property-invite-codes-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: propertyId
+            AttributeType: S
+          - AttributeName: code
+            AttributeType: S
+        KeySchema:
+          - AttributeName: propertyId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CodeIndex
+            KeySchema:
+              - AttributeName: code
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        Tags:
+          - Key: Stage
+            Value: ${self:provider.stage}
+
     # ============ KMS KEY FOR SMTP CREDENTIALS ============
     SmtpCredentialsKey:
       Type: AWS::KMS::Key
@@ -1381,6 +1470,12 @@ resources:
       Value: !Ref ComplaintsTable
       Export:
         Name: ${self:service}-ComplaintsTable-${self:provider.stage}
+
+    PropertyInviteCodesTableName:
+      Description: DynamoDB Property Invite Codes Table Name
+      Value: !Ref PropertyInviteCodesTable
+      Export:
+        Name: ${self:service}-PropertyInviteCodesTable-${self:provider.stage}
 
     SmtpCredentialsKeyId:
       Description: KMS Key ID for SMTP credential encryption

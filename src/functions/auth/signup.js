@@ -12,7 +12,7 @@ exports.handler = async (event) => {
         const { email, password, name, phone, userType } = body;
 
         // Validate required fields
-        const requiredValidation = validateRequiredFields(body, ['email', 'password']);
+        const requiredValidation = validateRequiredFields(body, ['email', 'password', 'userType']);
         if (!requiredValidation.valid) {
             return response.error(requiredValidation.message, 400);
         }
@@ -33,7 +33,7 @@ exports.handler = async (event) => {
         const sanitizedEmail = sanitizeInput(email.toLowerCase());
         const sanitizedName = name ? sanitizeInput(name) : null;
         const sanitizedPhone = phone ? sanitizeInput(phone) : null;
-        const sanitizedUserType = userType ? sanitizeInput(userType) : 'tenant';
+        const sanitizedUserType = userType ? sanitizeInput(userType) : null;
 
         // SECURITY: Only allow tenant and owner roles in public signup
         // Admin users must be created through the protected createAdmin endpoint
