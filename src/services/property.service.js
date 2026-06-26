@@ -86,8 +86,13 @@ exports.getPropertiesByOwner = async (ownerId, limit = 50, lastEvaluatedKey = nu
             TableName: PROPERTY_TABLE,
             IndexName: 'OwnerIdIndex',
             KeyConditionExpression: 'ownerIdIndex = :ownerId',
+            FilterExpression: '#status <> :deleted',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
             ExpressionAttributeValues: {
-                ':ownerId': ownerId
+                ':ownerId': ownerId,
+                ':deleted': 'deleted'
             },
             Limit: limit
         };
