@@ -24,6 +24,7 @@ provider:
     NOTIFICATION_TABLE: ${self:service}-notifications-${self:provider.stage}
     COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
     INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
+    EMAIL_LOG_TABLE: ${self:service}-email-logs-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
@@ -78,6 +79,18 @@ provider:
             - !Sub "${ComplaintsTable.Arn}/index/*"
             - !GetAtt PropertyInviteCodesTable.Arn
             - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
+            - !GetAtt EmailLogsTable.Arn
+            - !Sub "${EmailLogsTable.Arn}/index/*"
+
+        # DynamoDB Streams read permission
+        - Effect: Allow
+          Action:
+            - dynamodb:GetRecords
+            - dynamodb:GetShardIterator
+            - dynamodb:DescribeStream
+            - dynamodb:ListStreams
+          Resource:
+            - !GetAtt TenantsTable.StreamArn
           
         # S3 permissions
         - Effect: Allow
@@ -818,6 +831,43 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  # ============ EMAIL AUTOMATION ============
+  scheduledRentReminder:
+    handler: src/functions/financial/scheduledRentReminder.handler
+    timeout: 300
+    events:
+      - schedule:
+          # 9:00 AM IST (3:30 AM UTC) on 1st of every month
+          rate: cron(30 3 1 * ? *)
+          enabled: true
+          input:
+            source: "scheduled"
+
+  onTenantCreated:
+    handler: src/functions/notifications/onTenantCreated.handler
+    timeout: 30
+    events:
+      - stream:
+          type: dynamodb
+          arn: !GetAtt TenantsTable.StreamArn
+          startingPosition: LATEST
+          batchSize: 10
+          bisectBatchOnFunctionError: true
+
+  broadcastEmail:
+    handler: src/functions/notifications/broadcastEmail.handler
+    timeout: 300
+    events:
+      - http:
+          path: notifications/broadcast
+          method: post
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
 package:
   individually: true
   patterns:
@@ -1369,6 +1419,36 @@ resources:
           - Key: Stage
             Value: ${self:provider.stage}
 
+    # Email Logs Table
+    EmailLogsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-email-logs-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: logId
+            AttributeType: S
+          - AttributeName: ownerIdIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: logId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: OwnerIdIndex
+            KeySchema:
+              - AttributeName: ownerIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
     # ============ KMS KEY FOR SMTP CREDENTIALS ============
     SmtpCredentialsKey:
       Type: AWS::KMS::Key
@@ -1482,3 +1562,9 @@ resources:
       Value: !Ref SmtpCredentialsKey
       Export:
         Name: ${self:service}-SmtpCredentialsKey-${self:provider.stage}
+
+    EmailLogsTableName:
+      Description: DynamoDB Email Logs Table Name
+      Value: !Ref EmailLogsTable
+      Export:
+        Name: ${self:service}-EmailLogsTable-${self:provider.stage}
