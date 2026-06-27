@@ -2,8 +2,10 @@ const complaintsService = require('../../services/complaints.service');
 const notificationService = require('../../services/notification.service');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
+const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { sendOwnerRequestEmail } = require('../../utils/ownerRequestEmail');
 
 exports.handler = async (event) => {
     try {
@@ -73,6 +75,29 @@ exports.handler = async (event) => {
             ).catch((notificationErr) => {
                 console.warn('Non-critical: failed to notify owner about complaint', notificationErr.message);
             });
+
+            const owner = await dynamoService.getUserById(property.ownerId).catch((ownerErr) => {
+                console.warn('Non-critical: failed to load owner for complaint email', ownerErr.message);
+                return null;
+            });
+
+            if (owner?.email) {
+                await sendOwnerRequestEmail({
+                    owner,
+                    tenant: {
+                        userId: dbUser.userId,
+                        name: dbUser.name,
+                        email: dbUser.email,
+                        phone: dbUser.phone || dbUser.phoneNumber,
+                    },
+                    property,
+                    requestTitle: notificationType,
+                    requestType: category === 'checkout' ? 'checkout' : 'complaint',
+                    message: `${sanitizeInput(title)}\n\n${sanitizeInput(description)}`,
+                }).catch((emailErr) => {
+                    console.warn('Non-critical: failed to email owner about complaint', emailErr.message);
+                });
+            }
         }
 
         return response.success({

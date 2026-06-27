@@ -2,6 +2,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
+const { withSignedImageUrls } = require('../../utils/propertyImages');
 
 exports.handler = async (event) => {
     try {
@@ -24,7 +25,7 @@ exports.handler = async (event) => {
 
         return response.success({
             message: 'Property retrieved successfully',
-            property: property
+            property: withSignedImageUrls(property)
         });
 
     } catch (err) {

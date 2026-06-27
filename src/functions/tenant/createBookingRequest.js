@@ -1,7 +1,9 @@
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
 const propertyService = require('../../services/property.service');
+const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
+const { sendOwnerRequestEmail } = require('../../utils/ownerRequestEmail');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -79,6 +81,31 @@ exports.handler = async (event) => {
             dynamodb.put({ TableName: process.env.NOTIFICATION_TABLE, Item: ownerRequest }).promise(),
             dynamodb.put({ TableName: process.env.NOTIFICATION_TABLE, Item: tenantCopy }).promise(),
         ]);
+
+        const owner = await dynamoService.getUserById(property.ownerId).catch((ownerErr) => {
+            console.warn('[createBookingRequest] owner lookup failed', ownerErr.message);
+            return null;
+        });
+
+        if (owner?.email) {
+            await sendOwnerRequestEmail({
+                owner,
+                tenant: {
+                    userId: dbUser.userId,
+                    name: dbUser.name,
+                    email: dbUser.email,
+                    phone: dbUser.phone || dbUser.phoneNumber,
+                },
+                property,
+                requestTitle: title,
+                requestType,
+                roomNumber: room?.roomNumber,
+                visitDate,
+                message,
+            }).catch((emailErr) => {
+                console.warn('[createBookingRequest] non-critical owner email failed', emailErr.message);
+            });
+        }
 
         return response.success({
             message: 'Request sent successfully',

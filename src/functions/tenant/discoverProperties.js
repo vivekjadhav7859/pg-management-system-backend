@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const response = require('../../utils/response');
+const { withSignedImageUrls } = require('../../utils/propertyImages');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -39,7 +40,7 @@ exports.handler = async (event) => {
             const lowestRent = rents.length ? Math.min(...rents) : 0;
             const highestRent = rents.length ? Math.max(...rents) : 0;
 
-            return {
+            return withSignedImageUrls({
                 propertyId: property.propertyId,
                 propertyName: property.propertyName,
                 address: property.address,
@@ -63,7 +64,7 @@ exports.handler = async (event) => {
                     securityDeposit: room.securityDeposit,
                     amenities: room.amenities || [],
                 })),
-            };
+            });
         }));
 
         const filtered = properties.filter((property) => {

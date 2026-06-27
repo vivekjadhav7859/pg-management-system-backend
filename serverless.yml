@@ -261,6 +261,20 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  createImageUploadUrls:
+    handler: src/functions/property/createImageUploadUrls.handler
+    events:
+      - http:
+          path: upload/images/sign
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   updateProperty:
     handler: src/functions/property/updateProperty.handler
     events:

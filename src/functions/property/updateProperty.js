@@ -3,6 +3,7 @@ const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
 const { sanitizeInput } = require('../../utils/validator');
+const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
 
 exports.handler = async (event) => {
     try {
@@ -56,7 +57,7 @@ exports.handler = async (event) => {
         }
 
         if (body.images !== undefined) {
-            updates.images = body.images;
+            updates.images = normalizeImageKeys(body.images);
         }
 
         if (body.status !== undefined) {
@@ -75,7 +76,7 @@ exports.handler = async (event) => {
 
         return response.success({
             message: 'Property updated successfully',
-            property: updatedProperty
+            property: withSignedImageUrls(updatedProperty)
         });
 
     } catch (err) {

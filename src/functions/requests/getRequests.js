@@ -24,7 +24,7 @@ exports.handler = async (event) => {
         const requests = (result.Items || []).filter((item) => {
             if (REQUEST_ENTITY_TYPES.has(item.entityType) && item.requestStatus) return true;
             return ['Booking Request', 'Schedule Visit Request', 'Check-out Request', 'Complaint Raised'].includes(item.type);
-        });
+        }).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
         return response.success({
             requests,

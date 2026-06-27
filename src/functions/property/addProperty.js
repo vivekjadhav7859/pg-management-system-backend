@@ -3,6 +3,7 @@ const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
 
 exports.handler = async (event) => {
     try {
@@ -78,27 +79,30 @@ exports.handler = async (event) => {
             totalBeds: totalBeds || 0,
             amenities: amenities || [],
             rules: rules || [],
-            images: images || []
+            images: normalizeImageKeys(images || [])
         });
 
         console.log('Property created successfully:', property.propertyId);
 
+        const signedProperty = withSignedImageUrls(property);
+
         return response.success({
             message: 'Property added successfully',
             property: {
-                propertyId: property.propertyId,
-                propertyName: property.propertyName,
-                address: property.address,
-                propertyType: property.propertyType,
-                totalRooms: property.totalRooms,
-                totalBeds: property.totalBeds,
-                occupiedBeds: property.occupiedBeds,
-                availableBeds: property.availableBeds,
-                amenities: property.amenities,
-                rules: property.rules,
-                images: property.images,
-                status: property.status,
-                createdAt: property.createdAt
+                propertyId: signedProperty.propertyId,
+                propertyName: signedProperty.propertyName,
+                address: signedProperty.address,
+                propertyType: signedProperty.propertyType,
+                totalRooms: signedProperty.totalRooms,
+                totalBeds: signedProperty.totalBeds,
+                occupiedBeds: signedProperty.occupiedBeds,
+                availableBeds: signedProperty.availableBeds,
+                amenities: signedProperty.amenities,
+                rules: signedProperty.rules,
+                images: signedProperty.images,
+                imageKeys: signedProperty.imageKeys,
+                status: signedProperty.status,
+                createdAt: signedProperty.createdAt
             }
         }, 201);
 

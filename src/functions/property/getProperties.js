@@ -2,6 +2,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
+const { withSignedImageUrlsList } = require('../../utils/propertyImages');
 
 exports.handler = async (event) => {
     try {
@@ -16,11 +17,12 @@ exports.handler = async (event) => {
 
         // Get properties for this owner
         const result = await propertyService.getPropertiesByOwner(dbUser.userId);
+        const properties = withSignedImageUrlsList(result.properties);
 
         return response.success({
             message: 'Properties retrieved successfully',
-            properties: result.properties,
-            count: result.properties.length
+            properties,
+            count: properties.length
         });
 
     } catch (err) {
