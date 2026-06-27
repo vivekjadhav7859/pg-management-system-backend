@@ -467,12 +467,6 @@ functions:
           method: get
           cors: true
 
-          authorizer:
-            name: authorizer
-            resultTtlInSeconds: 0
-            identitySource: method.request.header.Authorization
-            type: token
-
   createBookingRequest:
     handler: src/functions/tenant/createBookingRequest.handler
     events:
