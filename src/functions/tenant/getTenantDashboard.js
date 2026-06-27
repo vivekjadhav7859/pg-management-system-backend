@@ -20,21 +20,32 @@ exports.handler = async (event) => {
         const tenantResult = await dynamodb.query({
             TableName: process.env.TENANT_TABLE,
             IndexName: 'UserIdIndex',
-            KeyConditionExpression: 'userId = :uid',
+            KeyConditionExpression: 'userIdIndex = :uid',
             ExpressionAttributeValues: { ':uid': userId },
         }).promise();
 
         const tenant = (tenantResult.Items || []).find(t => t.status === 'active');
 
         if (!tenant) {
+            let linkedPropertyName = null;
+            if (user.linkedPropertyId) {
+                const linkedPropResult = await dynamodb.get({
+                    TableName: process.env.PROPERTY_TABLE,
+                    Key: { propertyId: user.linkedPropertyId },
+                }).promise();
+                linkedPropertyName = linkedPropResult.Item?.propertyName || null;
+            }
+
             // Tenant logged in but not yet checked in by owner
             return response.success({
                 status: 'pending_checkin',
                 linkedPropertyId: user.linkedPropertyId || null,
-                linkedPropertyName: null,
+                linkedPropertyName,
                 tenant: null,
                 room: null,
                 payments: [],
+                complaints: [],
+                notices: [],
             });
         }
 
@@ -56,11 +67,44 @@ exports.handler = async (event) => {
         const paymentsResult = await dynamodb.query({
             TableName: process.env.RENT_PAYMENT_TABLE,
             IndexName: 'TenantIdIndex',
-            KeyConditionExpression: 'tenantId = :tid',
+            KeyConditionExpression: 'tenantIdIndex = :tid',
             ExpressionAttributeValues: { ':tid': tenant.tenantId },
             ScanIndexForward: false,
             Limit: 12,
         }).promise();
+
+        const complaintsResult = await dynamodb.query({
+            TableName: process.env.COMPLAINTS_TABLE,
+            IndexName: 'TenantIdIndex',
+            KeyConditionExpression: 'tenantIdIndex = :tid',
+            ExpressionAttributeValues: { ':tid': tenant.tenantId },
+            ScanIndexForward: false,
+            Limit: 8,
+        }).promise();
+
+        const noticesResult = await dynamodb.query({
+            TableName: process.env.NOTIFICATION_TABLE,
+            IndexName: 'UserIdIndex',
+            KeyConditionExpression: 'userIdIndex = :uid',
+            ExpressionAttributeValues: { ':uid': userId },
+            ScanIndexForward: false,
+            Limit: 8,
+        }).promise();
+
+        let owner = null;
+        if (property?.ownerId) {
+            const ownerResult = await dynamodb.get({
+                TableName: process.env.USER_TABLE,
+                Key: { userId: property.ownerId },
+            }).promise();
+            if (ownerResult.Item) {
+                owner = {
+                    name: ownerResult.Item.name,
+                    email: ownerResult.Item.email,
+                    phone: ownerResult.Item.phoneNumber || ownerResult.Item.phone,
+                };
+            }
+        }
 
         const payments = (paymentsResult.Items || []).map(p => ({
             paymentId: p.paymentId,
@@ -90,6 +134,16 @@ exports.handler = async (event) => {
                 depositPaid: tenant.depositPaid,
                 bedNumber: tenant.bedNumber,
                 kycStatus: tenant.kycStatus,
+                emergencyContact: tenant.emergencyContact || {},
+                agreementStatus: tenant.agreementStatus || 'pending',
+                agreementSignedAt: tenant.agreementSignedAt || null,
+                roomInspectionStatus: tenant.roomInspectionStatus || null,
+                finalSettlementStatus: tenant.finalSettlementStatus || null,
+                depositRefundStatus: tenant.depositRefundStatus || null,
+                refundAmount: tenant.refundAmount || 0,
+                refundDate: tenant.refundDate || null,
+                nocIssued: Boolean(tenant.nocIssued),
+                nocIssuedAt: tenant.nocIssuedAt || null,
             },
             property: {
                 propertyId: property?.propertyId,
@@ -105,6 +159,9 @@ exports.handler = async (event) => {
                 rentPerBed: room?.rentPerBed,
             },
             payments,
+            complaints: complaintsResult.Items || [],
+            notices: noticesResult.Items || [],
+            owner,
         });
     } catch (err) {
         console.error('[getTenantDashboard]', err);

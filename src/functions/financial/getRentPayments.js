@@ -1,6 +1,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const financialService = require('../../services/financial.service');
+const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
 
 exports.handler = async (event) => {
@@ -36,7 +37,11 @@ exports.handler = async (event) => {
         }
 
         if (dbUser.userType === 'tenant') {
-            payments = payments.filter(p => p.tenantIdIndex === dbUser.userId);
+            const tenant = await tenantService.getTenantByUserId(dbUser.userId);
+            if (!tenant || tenant.propertyId !== propertyId) {
+                return response.error('You can only view your own payments', 403);
+            }
+            payments = payments.filter(p => p.tenantId === tenant.tenantId || p.tenantIdIndex === tenant.tenantId);
         }
 
         // Auto-upgrade 'pending' → 'overdue' for bills past the 5th (in-memory only, not persisted here)

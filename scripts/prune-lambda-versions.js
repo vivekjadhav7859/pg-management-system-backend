@@ -1,11 +1,11 @@
 /**
  * Prune old Lambda versions, keeping the N most recent per function.
- * Run after deploy: node scripts/prune-lambda-versions.js dev 5
+ * Run after deploy: node scripts/prune-lambda-versions.js dev 3
  */
 const AWS = require('aws-sdk');
 
 const stage = process.argv[2] || 'dev';
-const keepCount = parseInt(process.argv[3] || '5', 10);
+const keepCount = parseInt(process.argv[3] || '3', 10);
 const service = 'pg-management-backend';
 const region = process.env.AWS_REGION || 'ap-south-1';
 

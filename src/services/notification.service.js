@@ -4,7 +4,7 @@ const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.NOTIFICATION_TABLE;
 
-exports.createNotification = async (userId, propertyId, type, title, description, entityId, entityType) => {
+exports.createNotification = async (userId, propertyId, type, title, description, entityId, entityType, metadata = {}) => {
   const notificationId = uuidv4();
   const timestamp = new Date().toISOString();
 
@@ -19,7 +19,8 @@ exports.createNotification = async (userId, propertyId, type, title, description
     entityType,
     read: false,
     createdAt: timestamp,
-    createdAtIndex: timestamp
+    createdAtIndex: timestamp,
+    ...metadata
   };
 
   await dynamodb.put({

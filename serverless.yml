@@ -1,6 +1,11 @@
 service: pg-management-backend
 frameworkVersion: '4'
 
+custom:
+  kycBucketName: ${self:service}-kyc-documents-${self:provider.stage}-${aws:accountId}
+  prune:
+    automatic: true
+    number: 3
 
 provider:
   name: aws
@@ -17,7 +22,7 @@ provider:
     ROOM_TABLE: ${self:service}-rooms-${self:provider.stage}
     TENANT_TABLE: ${self:service}-tenants-${self:provider.stage}
     BED_ASSIGNMENT_TABLE: ${self:service}-bed-assignments-${self:provider.stage}
-    S3_BUCKET: ${self:service}-kyc-documents-${self:provider.stage}
+    S3_BUCKET: ${self:custom.kycBucketName}
     RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
     EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
     REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
@@ -454,6 +459,62 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  discoverProperties:
+    handler: src/functions/tenant/discoverProperties.handler
+    events:
+      - http:
+          path: tenant/discover
+          method: get
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  createBookingRequest:
+    handler: src/functions/tenant/createBookingRequest.handler
+    events:
+      - http:
+          path: tenant/booking-requests
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  signAgreement:
+    handler: src/functions/tenant/signAgreement.handler
+    events:
+      - http:
+          path: tenant/agreement/sign
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  payRent:
+    handler: src/functions/tenant/payRent.handler
+    events:
+      - http:
+          path: tenant/pay-rent
+          method: post
+          cors: true
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   # ============ FINANCIAL MANAGEMENT - RENT COLLECTION ============
   collectRent:
     handler: src/functions/financial/collectRent.handler
@@ -831,6 +892,32 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  getRequests:
+    handler: src/functions/requests/getRequests.handler
+    events:
+      - http:
+          path: requests
+          method: get
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateRequestStatus:
+    handler: src/functions/requests/updateRequestStatus.handler
+    events:
+      - http:
+          path: requests/{requestId}/status
+          method: put
+          cors: true
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   # ============ EMAIL AUTOMATION ============
   scheduledRentReminder:
     handler: src/functions/financial/scheduledRentReminder.handler
@@ -1154,7 +1241,7 @@ resources:
       Type: AWS::S3::Bucket
       DeletionPolicy: Retain
       Properties:
-        BucketName: ${self:service}-kyc-documents-${self:provider.stage}
+        BucketName: ${self:custom.kycBucketName}
         CorsConfiguration:
           CorsRules:
             - AllowedOrigins:

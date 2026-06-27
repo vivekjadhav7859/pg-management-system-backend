@@ -1,5 +1,7 @@
 const complaintsService = require('../../services/complaints.service');
+const notificationService = require('../../services/notification.service');
 const propertyService = require('../../services/property.service');
+const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 
@@ -26,13 +28,20 @@ exports.handler = async (event) => {
         }
 
         let tenantId = null;
-        // If user is tenant, ensure they belong to this property
         if (dbUser.userType === 'tenant') {
-            // we should ideally verify tenant is in this property, assuming they are
-            tenantId = dbUser.userId;
+            const tenant = await tenantService.getTenantByUserId(dbUser.userId);
+            if (!tenant || tenant.propertyId !== propertyId) {
+                return response.error('You can only raise complaints for your linked property', 403);
+            }
+            tenantId = tenant.tenantId;
+        } else if (dbUser.userType === 'owner') {
+            if (property.ownerId !== dbUser.userId) {
+                return response.error('You can only create complaints for your own properties', 403);
+            }
+            tenantId = body.tenantId || null;
         } else if (body.tenantId) {
-            tenantId = body.tenantId; // Owner creating on behalf of tenant
-        }
+            tenantId = body.tenantId;
+        } 
 
         const complaint = await complaintsService.createComplaint({
             propertyId,
@@ -42,6 +51,29 @@ exports.handler = async (event) => {
             category: sanitizeInput(category),
             priority: priority ? sanitizeInput(priority) : 'medium'
         });
+
+        if (dbUser.userType === 'tenant' && property.ownerId) {
+            const notificationType = category === 'checkout' ? 'Check-out Request' : 'Complaint Raised';
+            await notificationService.createNotification(
+                property.ownerId,
+                propertyId,
+                notificationType,
+                sanitizeInput(title),
+                sanitizeInput(description),
+                complaint.complaintId,
+                'complaint',
+                {
+                    requestStatus: 'pending',
+                    tenantUserId: dbUser.userId,
+                    tenantName: dbUser.name || '',
+                    tenantEmail: dbUser.email || '',
+                    tenantPhone: dbUser.phone || dbUser.phoneNumber || '',
+                    requestType: category === 'checkout' ? 'checkout' : 'complaint',
+                }
+            ).catch((notificationErr) => {
+                console.warn('Non-critical: failed to notify owner about complaint', notificationErr.message);
+            });
+        }
 
         return response.success({
             message: 'Complaint created successfully',

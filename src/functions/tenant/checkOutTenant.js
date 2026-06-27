@@ -38,6 +38,21 @@ exports.handler = async (event) => {
         // Check-out tenant
         await tenantService.checkOutTenant(tenantId, checkOutDate);
 
+        const settlementUpdates = {};
+        if (body.roomInspectionStatus !== undefined) settlementUpdates.roomInspectionStatus = body.roomInspectionStatus;
+        if (body.finalSettlementStatus !== undefined) settlementUpdates.finalSettlementStatus = body.finalSettlementStatus;
+        if (body.depositRefundStatus !== undefined) settlementUpdates.depositRefundStatus = body.depositRefundStatus;
+        if (body.refundAmount !== undefined) settlementUpdates.refundAmount = Number(body.refundAmount || 0);
+        if (body.refundDate !== undefined) settlementUpdates.refundDate = body.refundDate;
+        if (body.nocIssued !== undefined) {
+            settlementUpdates.nocIssued = Boolean(body.nocIssued);
+            settlementUpdates.nocIssuedAt = body.nocIssued ? new Date().toISOString() : null;
+        }
+
+        if (Object.keys(settlementUpdates).length > 0) {
+            await tenantService.updateTenant(tenantId, settlementUpdates);
+        }
+
         // Release bed (find assignment by tenant)
         // Note: You might want to add a method to get assignment by tenantId
         
@@ -52,7 +67,8 @@ exports.handler = async (event) => {
         return response.success({
             message: 'Tenant checked-out successfully',
             tenantId: tenantId,
-            checkOutDate: checkOutDate
+            checkOutDate: checkOutDate,
+            settlement: settlementUpdates
         });
 
     } catch (err) {

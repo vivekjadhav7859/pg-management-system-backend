@@ -37,7 +37,7 @@ exports.handler = async (event) => {
         const tenantResult = await dynamodb.query({
             TableName: process.env.TENANT_TABLE,
             IndexName: 'UserIdIndex',
-            KeyConditionExpression: 'userId = :uid',
+            KeyConditionExpression: 'userIdIndex = :uid',
             ExpressionAttributeValues: { ':uid': userId },
         }).promise();
 

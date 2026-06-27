@@ -229,6 +229,26 @@ exports.updateTenant = async (tenantId, updates) => {
             expressionAttributeValues[':depositDate'] = updates.depositDate;
         }
 
+        const optionalFields = [
+            'agreementStatus',
+            'agreementSignedAt',
+            'agreementAcceptedBy',
+            'roomInspectionStatus',
+            'finalSettlementStatus',
+            'depositRefundStatus',
+            'refundAmount',
+            'refundDate',
+            'nocIssued',
+            'nocIssuedAt',
+        ];
+
+        optionalFields.forEach((field) => {
+            if (updates[field] !== undefined) {
+                updateExpression += `, ${field} = :${field}`;
+                expressionAttributeValues[`:${field}`] = updates[field];
+            }
+        });
+
         const params = {
             TableName: TENANT_TABLE,
             Key: { tenantId },
