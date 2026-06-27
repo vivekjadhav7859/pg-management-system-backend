@@ -17,7 +17,7 @@
 const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const AdmZip = require('adm-zip'); // optional — falls back to AWS CLI if not present
+const os = require('os');
 
 const args = process.argv.slice(2);
 const stage = args.includes('--stage') ? args[args.indexOf('--stage') + 1] : 'dev';
@@ -92,34 +92,94 @@ function getLambdaCodeSize(functionName) {
   }
 }
 
-function buildZipForFunction(fn) {
-  // Look for the built file in .serverless/build (serverless-esbuild output)
+function resolveBuiltFile(fn) {
   const buildDir = path.join(__dirname, '..', '.serverless', 'build');
-  const builtFile = path.join(buildDir, fn.src);
+  const fromPackage = path.join(buildDir, fn.src);
+  if (fs.existsSync(fromPackage)) {
+    return fromPackage;
+  }
 
-  if (!fs.existsSync(builtFile)) {
-    console.error(`  ✗ Built file not found: ${builtFile}`);
-    console.error(`    Run 'npx serverless package --stage ${stage}' first.`);
+  let sourceEntry = path.join(__dirname, '..', fn.src);
+  if (!fs.existsSync(sourceEntry)) {
+    const dir = path.dirname(sourceEntry);
+    const expectedBase = path.basename(sourceEntry);
+    if (fs.existsSync(dir)) {
+      const match = fs.readdirSync(dir).find(
+        (file) => file.toLowerCase() === expectedBase.toLowerCase()
+      );
+      if (match) {
+        sourceEntry = path.join(dir, match);
+        console.warn(`  ⚠️  Using ${match} (fix git filename casing to ${expectedBase})`);
+      }
+    }
+  }
+  if (!fs.existsSync(sourceEntry)) {
+    console.error(`  ✗ Source not found: ${sourceEntry}`);
     return null;
   }
 
-  const zipPath = path.join(__dirname, '..', '.serverless', `fix-${fn.name}.zip`);
+  const tmpOut = path.join(os.tmpdir(), `pg-lambda-${fn.name}-${Date.now()}`);
+  fs.mkdirSync(path.dirname(path.join(tmpOut, fn.src)), { recursive: true });
+  const bundledOut = path.join(tmpOut, fn.src);
 
-  // Use PowerShell to create zip (cross-platform fallback)
-  const psScript = `
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [System.IO.Compression.ZipFile]::Open('${zipPath.replace(/\\/g, '\\\\')}', 'Create')
-    $entry = $zip.CreateEntry('${fn.src.replace(/\\/g, '/')}')
-    $src = [System.IO.File]::OpenRead('${builtFile.replace(/\\/g, '\\\\')}')
-    $dest = $entry.Open()
-    $src.CopyTo($dest)
-    $src.Close(); $dest.Close(); $zip.Dispose()
-  `.trim().replace(/\n\s+/g, '; ');
-
-  const result = spawnSync('powershell', ['-Command', psScript], { encoding: 'utf8' });
-  if (result.error || result.status !== 0) {
-    console.error(`  ✗ Failed to create zip: ${result.stderr}`);
+  console.log(`  📦 Bundling ${fn.name} with esbuild...`);
+  try {
+    require('esbuild').buildSync({
+      entryPoints: [sourceEntry],
+      bundle: true,
+      minify: true,
+      platform: 'node',
+      target: 'node20',
+      outfile: bundledOut,
+      packages: 'bundle',
+    });
+  } catch (err) {
+    console.error(`  ✗ esbuild failed: ${err.message}`);
     return null;
+  }
+
+  return bundledOut;
+}
+
+function buildZipForFunction(fn) {
+  const builtFile = resolveBuiltFile(fn);
+  if (!builtFile) {
+    return null;
+  }
+
+  const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), `pg-zip-${fn.name}-`));
+  const destHandler = path.join(stagingDir, fn.src);
+  fs.mkdirSync(path.dirname(destHandler), { recursive: true });
+  fs.copyFileSync(builtFile, destHandler);
+
+  const root = path.join(__dirname, '..');
+  for (const meta of ['package.json', 'package-lock.json']) {
+    const src = path.join(root, meta);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(stagingDir, meta));
+    }
+  }
+
+  const zipPath = path.join(__dirname, '..', '.serverless', `fix-${fn.name}.zip`);
+  fs.mkdirSync(path.dirname(zipPath), { recursive: true });
+  if (fs.existsSync(zipPath)) {
+    fs.unlinkSync(zipPath);
+  }
+
+  const tarResult = spawnSync(
+    'tar',
+    ['-a', '-cf', zipPath, '-C', stagingDir, '.'],
+    { encoding: 'utf8' }
+  );
+  if (tarResult.status !== 0) {
+    console.error(`  ✗ Failed to create zip: ${tarResult.stderr}`);
+    return null;
+  }
+
+  try {
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
   }
 
   return zipPath;

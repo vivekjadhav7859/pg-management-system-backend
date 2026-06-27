@@ -1,4 +1,4 @@
-const { verifyToken } = require('../../services/cognito.service');
+
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
@@ -9,18 +9,9 @@ exports.handler = async (event) => {
         console.log('Add property request received');
 
         // Verify token and get user info
-        const authHeader = event.headers.Authorization || event.headers.authorization;
-        if (!authHeader) {
-            return response.error('Authorization header is required', 401);
-        }
-
-        const accessToken = authHeader.replace('Bearer ', '');
-        const cognitoUser = await verifyToken(accessToken);
-
-        // Get user details from database
-        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
+        const dbUser = event.requestContext?.authorizer;
         if (!dbUser) {
-            return response.error('User not found', 404);
+            return response.error('Unauthorized', 401);
         }
 
         // Check if user is owner

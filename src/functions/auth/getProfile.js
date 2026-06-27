@@ -46,7 +46,9 @@ exports.handler = async (event) => {
                 profileCompleted: dbUser.profileCompleted,
                 lastLoginAt: dbUser.lastLoginAt,
                 createdAt: dbUser.createdAt,
-                updatedAt: dbUser.updatedAt
+                updatedAt: dbUser.updatedAt,
+                linkedPropertyId: dbUser.linkedPropertyId || null,
+                linkedOwnerId: dbUser.linkedOwnerId || null
             }
         });
 

@@ -1,4 +1,4 @@
-const { verifyToken } = require('../../services/cognito.service');
+
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
@@ -6,17 +6,9 @@ const { sanitizeInput } = require('../../utils/validator');
 
 exports.handler = async (event) => {
     try {
-        const authHeader = event.headers.Authorization || event.headers.authorization;
-        if (!authHeader) {
-            return response.error('Authorization header is required', 401);
-        }
-
-        const accessToken = authHeader.replace('Bearer ', '');
-        const cognitoUser = await verifyToken(accessToken);
-        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
-
-        if (!dbUser || dbUser.status !== 'active') {
-            return response.error('User not found or not active', 403);
+        const dbUser = event.requestContext?.authorizer;
+        if (!dbUser) {
+            return response.error('Unauthorized', 401);
         }
 
         const roomId = event.pathParameters.roomId;
