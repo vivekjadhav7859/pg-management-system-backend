@@ -1,5 +1,7 @@
 const AWS = require('aws-sdk');
 const response = require('../../utils/response');
+const { sendOwnerRequestEmail } = require('../../utils/ownerRequestEmail');
+const { createTenantJoinRequest } = require('../../utils/tenantJoinRequest');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -32,6 +34,29 @@ exports.handler = async (event) => {
         }
 
         const invite = codeResult.Items[0];
+
+        const [tenantUserResult, propertyResult, ownerResult] = await Promise.all([
+            dynamodb.get({
+                TableName: process.env.USER_TABLE,
+                Key: { userId },
+            }).promise(),
+            dynamodb.get({
+                TableName: process.env.PROPERTY_TABLE,
+                Key: { propertyId: invite.propertyId },
+            }).promise(),
+            dynamodb.get({
+                TableName: process.env.USER_TABLE,
+                Key: { userId: invite.ownerId },
+            }).promise(),
+        ]);
+
+        const tenantUser = tenantUserResult.Item || { userId };
+        const property = propertyResult.Item || {
+            propertyId: invite.propertyId,
+            propertyName: invite.propertyName,
+            ownerId: invite.ownerId,
+        };
+        const owner = ownerResult.Item || { userId: invite.ownerId };
 
         // 2. Check if this user already has an active tenant record for this property
         const tenantResult = await dynamodb.query({
@@ -68,8 +93,32 @@ exports.handler = async (event) => {
             },
         }).promise();
 
+        const joinRequest = await createTenantJoinRequest({
+            owner,
+            tenant: tenantUser,
+            property,
+        });
+
+        if (joinRequest?.created && owner?.email) {
+            await sendOwnerRequestEmail({
+                owner,
+                tenant: {
+                    userId: tenantUser.userId,
+                    name: tenantUser.name,
+                    email: tenantUser.email,
+                    phone: tenantUser.phoneNumber || tenantUser.phone,
+                },
+                property,
+                requestTitle: 'Tenant Join Request',
+                requestType: 'tenant_join',
+                message: 'Tenant used an invitation code and is waiting for room allocation and check-in.',
+            }).catch((emailErr) => {
+                console.warn('[linkTenantProperty] non-critical owner email failed', emailErr.message);
+            });
+        }
+
         return response.success({
-            message: 'Successfully linked to property',
+            message: 'Successfully linked to property. Owner has been notified for check-in.',
             propertyId: invite.propertyId,
             propertyName: invite.propertyName,
             ownerId: invite.ownerId,

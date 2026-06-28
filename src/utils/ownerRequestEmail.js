@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
-const { logEmail } = require('./emailHelper');
+const financialService = require('../services/financial.service');
+const { buildTransporter, logEmail } = require('./emailHelper');
 
 const ses = new AWS.SES({ region: process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1' });
 const FROM_EMAIL = process.env.SES_FROM_EMAIL;
@@ -21,8 +22,8 @@ exports.sendOwnerRequestEmail = async ({
     visitDate,
     message,
 }) => {
-    if (!owner?.email || !FROM_EMAIL) {
-        return { sent: false, reason: 'Missing owner email or SES_FROM_EMAIL' };
+    if (!owner?.email) {
+        return { sent: false, reason: 'Missing owner email' };
     }
 
     const subject = `${requestTitle} - ${property?.propertyName || 'Nexus PG'}`;
@@ -47,7 +48,48 @@ exports.sendOwnerRequestEmail = async ({
   </div>
 </div>`;
 
-    try {
+    const emailLog = {
+        ownerId: owner.userId,
+        tenantId: tenant?.userId || '',
+        tenantEmail: tenant?.email || '',
+        type: 'OWNER_REQUEST_ALERT',
+        subject,
+    };
+
+    const sendWithOwnerSmtp = async () => {
+        if (!property?.propertyId) return { sent: false, reason: 'Missing propertyId' };
+
+        const reminderSettings = await financialService.getReminderSettings(property.propertyId).catch((err) => {
+            console.warn('[ownerRequestEmail] reminder settings lookup failed', err.message);
+            return null;
+        });
+
+        if (!reminderSettings?.emailConfig) {
+            return { sent: false, reason: 'Owner SMTP not configured' };
+        }
+
+        const transporter = await buildTransporter(reminderSettings.emailConfig);
+        const mail = {
+            from: `"${property?.propertyName || 'Nexus PG'}" <${reminderSettings.emailConfig.user}>`,
+            to: owner.email,
+            subject,
+            html,
+        };
+
+        if (tenant?.email) {
+            mail.replyTo = tenant.email;
+        }
+
+        await transporter.sendMail(mail);
+        await logEmail({ ...emailLog, status: 'SENT' });
+        return { sent: true, provider: 'smtp' };
+    };
+
+    const sendWithSes = async () => {
+        if (!FROM_EMAIL) {
+            return { sent: false, reason: 'SES_FROM_EMAIL not configured' };
+        }
+
         const params = {
             Source: FROM_EMAIL,
             Destination: { ToAddresses: [owner.email] },
@@ -62,27 +104,31 @@ exports.sendOwnerRequestEmail = async ({
         }
 
         await ses.sendEmail(params).promise();
+        await logEmail({ ...emailLog, status: 'SENT' });
+        return { sent: true, provider: 'ses' };
+    };
 
-        await logEmail({
-            ownerId: owner.userId,
-            tenantId: tenant?.userId || '',
-            tenantEmail: tenant?.email || '',
-            type: 'OWNER_REQUEST_ALERT',
-            subject,
-            status: 'SENT',
-        });
+    const failures = [];
 
-        return { sent: true };
+    try {
+        const smtpResult = await sendWithOwnerSmtp();
+        if (smtpResult.sent) return smtpResult;
+        failures.push(smtpResult.reason);
     } catch (err) {
-        await logEmail({
-            ownerId: owner.userId,
-            tenantId: tenant?.userId || '',
-            tenantEmail: tenant?.email || '',
-            type: 'OWNER_REQUEST_ALERT',
-            subject,
-            status: 'FAILED',
-            errorMessage: err.message,
-        });
-        throw err;
+        failures.push(`Owner SMTP failed: ${err.message}`);
+        console.warn('[ownerRequestEmail] owner SMTP failed', err.message);
     }
+
+    try {
+        const sesResult = await sendWithSes();
+        if (sesResult.sent) return sesResult;
+        failures.push(sesResult.reason);
+    } catch (err) {
+        failures.push(`SES failed: ${err.message}`);
+        console.warn('[ownerRequestEmail] SES failed', err.message);
+    }
+
+    const reason = failures.filter(Boolean).join('; ');
+    await logEmail({ ...emailLog, status: 'FAILED', errorMessage: reason });
+    return { sent: false, reason };
 };

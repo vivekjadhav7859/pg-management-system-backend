@@ -3,7 +3,7 @@ const response = require('../../utils/response');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-const REQUEST_ENTITY_TYPES = new Set(['bookingRequest', 'complaint']);
+const REQUEST_ENTITY_TYPES = new Set(['bookingRequest', 'complaint', 'tenantJoinRequest']);
 
 exports.handler = async (event) => {
     try {
@@ -23,7 +23,7 @@ exports.handler = async (event) => {
 
         const requests = (result.Items || []).filter((item) => {
             if (REQUEST_ENTITY_TYPES.has(item.entityType) && item.requestStatus) return true;
-            return ['Booking Request', 'Schedule Visit Request', 'Check-out Request', 'Complaint Raised'].includes(item.type);
+            return ['Booking Request', 'Schedule Visit Request', 'Tenant Join Request', 'Check-out Request', 'Complaint Raised'].includes(item.type);
         }).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
         return response.success({

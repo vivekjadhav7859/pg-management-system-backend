@@ -1,5 +1,7 @@
 const AWS = require('aws-sdk');
 const response = require('../../utils/response');
+const { sendOwnerRequestEmail } = require('../../utils/ownerRequestEmail');
+const { createTenantJoinRequest } = require('../../utils/tenantJoinRequest');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -28,12 +30,57 @@ exports.handler = async (event) => {
 
         if (!tenant) {
             let linkedPropertyName = null;
+            let owner = null;
+            let linkedProperty = null;
+            let ownerUser = null;
             if (user.linkedPropertyId) {
                 const linkedPropResult = await dynamodb.get({
                     TableName: process.env.PROPERTY_TABLE,
                     Key: { propertyId: user.linkedPropertyId },
                 }).promise();
-                linkedPropertyName = linkedPropResult.Item?.propertyName || null;
+                linkedProperty = linkedPropResult.Item;
+                linkedPropertyName = linkedProperty?.propertyName || null;
+
+                if (linkedProperty?.ownerId) {
+                    const ownerResult = await dynamodb.get({
+                        TableName: process.env.USER_TABLE,
+                        Key: { userId: linkedProperty.ownerId },
+                    }).promise();
+                    ownerUser = ownerResult.Item || null;
+                    if (ownerUser) {
+                        owner = {
+                            name: ownerUser.name,
+                            email: ownerUser.email,
+                            phone: ownerUser.phoneNumber || ownerUser.phone,
+                        };
+                    }
+                }
+            }
+
+            if (linkedProperty && ownerUser) {
+                const joinRequest = await createTenantJoinRequest({
+                    owner: ownerUser,
+                    tenant: user,
+                    property: linkedProperty,
+                });
+
+                if (joinRequest?.created && ownerUser.email) {
+                    await sendOwnerRequestEmail({
+                        owner: ownerUser,
+                        tenant: {
+                            userId: user.userId,
+                            name: user.name,
+                            email: user.email,
+                            phone: user.phoneNumber || user.phone,
+                        },
+                        property: linkedProperty,
+                        requestTitle: 'Tenant Join Request',
+                        requestType: 'tenant_join',
+                        message: 'Tenant is linked through an invitation code and is waiting for room allocation and check-in.',
+                    }).catch((emailErr) => {
+                        console.warn('[getTenantDashboard] non-critical owner email failed', emailErr.message);
+                    });
+                }
             }
 
             // Tenant logged in but not yet checked in by owner
@@ -46,6 +93,7 @@ exports.handler = async (event) => {
                 payments: [],
                 complaints: [],
                 notices: [],
+                owner,
             });
         }
 
