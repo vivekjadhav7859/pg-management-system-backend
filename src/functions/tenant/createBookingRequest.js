@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { sendOwnerRequestEmail } = require('../../utils/ownerRequestEmail');
+const { formatDateIN, isPastISODateInIST, parseISODateOnly } = require('../../utils/dateFormat');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -22,6 +23,15 @@ exports.handler = async (event) => {
             return response.error('propertyId and valid requestType are required', 400);
         }
 
+        if (visitDate) {
+            if (!parseISODateOnly(visitDate)) {
+                return response.error('Preferred date must use YYYY-MM-DD format', 400);
+            }
+            if (isPastISODateInIST(visitDate)) {
+                return response.error('Preferred date cannot be in the past', 400);
+            }
+        }
+
         const property = await propertyService.getPropertyById(propertyId);
         if (!property || property.status !== 'active') {
             return response.error('Property not available', 404);
@@ -33,6 +43,41 @@ exports.handler = async (event) => {
             if (!room || room.propertyId !== propertyId) {
                 return response.error('Room not found for this property', 404);
             }
+            if ((room.availableBeds || 0) <= 0 || room.status === 'maintenance') {
+                return response.error('Selected room is no longer available', 409);
+            }
+        }
+
+        const duplicateWindowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        const existingRequests = await dynamodb.query({
+            TableName: process.env.NOTIFICATION_TABLE,
+            IndexName: 'UserIdIndex',
+            KeyConditionExpression: 'userIdIndex = :userId',
+            FilterExpression: [
+                'entityType = :entityType',
+                'propertyIdIndex = :propertyId',
+                'tenantUserId = :tenantUserId',
+                'requestType = :requestType',
+                'requestStatus = :pending',
+                'createdAt >= :windowStart',
+            ].join(' AND '),
+            ExpressionAttributeValues: {
+                ':userId': property.ownerId,
+                ':entityType': 'bookingRequest',
+                ':propertyId': propertyId,
+                ':tenantUserId': dbUser.userId,
+                ':requestType': requestType,
+                ':pending': 'pending',
+                ':windowStart': duplicateWindowStart,
+            },
+        }).promise();
+
+        if ((existingRequests.Items || []).length > 0) {
+            return response.success({
+                message: 'You already sent this request recently',
+                request: existingRequests.Items[0],
+                deduped: true,
+            });
         }
 
         const timestamp = new Date().toISOString();
@@ -41,7 +86,7 @@ exports.handler = async (event) => {
         const description = [
             `${dbUser.name || dbUser.email || 'A tenant'} requested ${requestType === 'visit' ? 'a visit' : 'a booking'} for ${property.propertyName}.`,
             room ? `Room ${room.roomNumber}.` : '',
-            visitDate ? `Preferred date: ${visitDate}.` : '',
+            visitDate ? `Preferred date: ${formatDateIN(visitDate)}.` : '',
             message ? `Note: ${message}` : '',
         ].filter(Boolean).join(' ');
 
@@ -49,6 +94,7 @@ exports.handler = async (event) => {
             id: requestId,
             userIdIndex: property.ownerId,
             propertyIdIndex: propertyId,
+            propertyName: property.propertyName || '',
             type: title,
             title,
             description,
@@ -64,6 +110,7 @@ exports.handler = async (event) => {
             roomId: roomId || null,
             roomNumber: room?.roomNumber || null,
             visitDate: visitDate || null,
+            visitDateDisplay: visitDate ? formatDateIN(visitDate) : null,
             message: message || '',
             createdAt: timestamp,
             createdAtIndex: timestamp,
@@ -87,8 +134,9 @@ exports.handler = async (event) => {
             return null;
         });
 
+        let emailResult = { sent: false, reason: 'Owner email not found' };
         if (owner?.email) {
-            await sendOwnerRequestEmail({
+            emailResult = await sendOwnerRequestEmail({
                 owner,
                 tenant: {
                     userId: dbUser.userId,
@@ -100,16 +148,40 @@ exports.handler = async (event) => {
                 requestTitle: title,
                 requestType,
                 roomNumber: room?.roomNumber,
-                visitDate,
+                visitDate: visitDate ? formatDateIN(visitDate) : '',
                 message,
             }).catch((emailErr) => {
                 console.warn('[createBookingRequest] non-critical owner email failed', emailErr.message);
+                return { sent: false, reason: emailErr.message };
             });
         }
 
+        if (!emailResult.sent) {
+            console.warn('[createBookingRequest] owner email not sent', emailResult.reason);
+        }
+
+        await dynamodb.update({
+            TableName: process.env.NOTIFICATION_TABLE,
+            Key: { id: requestId },
+            UpdateExpression: 'SET ownerEmailStatus = :status, ownerEmailProvider = :provider, ownerEmailError = :error, updatedAt = :updatedAt',
+            ExpressionAttributeValues: {
+                ':status': emailResult.sent ? 'sent' : 'failed',
+                ':provider': emailResult.provider || null,
+                ':error': emailResult.sent ? null : (emailResult.reason || 'Unknown email error'),
+                ':updatedAt': new Date().toISOString(),
+            },
+        }).promise().catch((logErr) => {
+            console.warn('[createBookingRequest] failed to update owner email status', logErr.message);
+        });
+
         return response.success({
             message: 'Request sent successfully',
-            request: ownerRequest,
+            request: {
+                ...ownerRequest,
+                ownerEmailStatus: emailResult.sent ? 'sent' : 'failed',
+                ownerEmailProvider: emailResult.provider || null,
+                ownerEmailError: emailResult.sent ? null : (emailResult.reason || 'Unknown email error'),
+            },
         }, 201);
     } catch (err) {
         console.error('[createBookingRequest]', err);

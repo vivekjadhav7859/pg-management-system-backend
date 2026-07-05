@@ -12,7 +12,7 @@ exports.handler = async (event) => {
 
         const tenantId = event.pathParameters.tenantId;
         const body = JSON.parse(event.body);
-        const { documentType, fileExtension } = body;
+        const { documentType, fileExtension, contentType } = body;
 
         if (!documentType || !fileExtension) {
             return response.error('Document type and file extension are required', 400);
@@ -21,6 +21,24 @@ exports.handler = async (event) => {
         const validDocTypes = ['aadhar', 'pan', 'photo', 'agreement'];
         if (!validDocTypes.includes(documentType)) {
             return response.error('Invalid document type', 400);
+        }
+
+        const normalizedExtension = String(fileExtension).toLowerCase().replace(/^\./, '');
+        const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+        if (!allowedExtensions.includes(normalizedExtension)) {
+            return response.error('KYC documents must be JPG, PNG, WEBP, or PDF files', 400);
+        }
+
+        const resolvedContentType = contentType || (
+            normalizedExtension === 'pdf'
+                ? 'application/pdf'
+                : normalizedExtension === 'jpg'
+                ? 'image/jpeg'
+                : `image/${normalizedExtension}`
+        );
+        const isAllowedContentType = resolvedContentType === 'application/pdf' || resolvedContentType.startsWith('image/');
+        if (!isAllowedContentType) {
+            return response.error('KYC documents must be an image or PDF', 400);
         }
 
         const tenant = await tenantService.getTenantById(tenantId);
@@ -40,17 +58,21 @@ exports.handler = async (event) => {
         }
 
         // Generate presigned upload URL
-        const uploadData = await tenantService.generateUploadUrl(tenantId, documentType, fileExtension);
+        const uploadData = await tenantService.generateUploadUrl(tenantId, documentType, normalizedExtension, resolvedContentType);
 
         await tenantService.updateTenant(tenantId, {
-            kycStatus: 'pending',
+            kycStatus: 'submitted',
+            status: tenant.kycStatus === 'verified' ? 'active' : 'in_progress',
+            tenancyStatus: tenant.kycStatus === 'verified' ? 'ongoing' : 'onboarding',
             kycDocuments: {
                 ...(tenant.kycDocuments || {}),
                 [documentType]: {
                     key: uploadData.key,
                     documentUrl: uploadData.documentUrl,
+                    fileExtension: normalizedExtension,
+                    contentType: resolvedContentType,
                     uploadedAt: new Date().toISOString(),
-                    status: 'pending',
+                    status: 'submitted',
                 },
             },
         });
@@ -60,6 +82,7 @@ exports.handler = async (event) => {
             uploadUrl: uploadData.uploadUrl,
             documentUrl: uploadData.documentUrl,
             key: uploadData.key,
+            contentType: uploadData.contentType,
             expiresIn: 300 // 5 minutes
         });
 

@@ -45,11 +45,21 @@ exports.handler = async (event) => {
         }
 
         if (body.kycStatus !== undefined) {
-            const validStatuses = ['pending', 'verified', 'rejected'];
+            const validStatuses = ['pending', 'submitted', 'verified', 'rejected'];
             if (!validStatuses.includes(body.kycStatus)) {
                 return response.error('Invalid KYC status', 400);
             }
             updates.kycStatus = body.kycStatus;
+            updates.kycReviewedAt = new Date().toISOString();
+            updates.kycReviewNotes = body.kycReviewNotes ? sanitizeInput(body.kycReviewNotes) : '';
+
+            if (body.kycStatus === 'verified') {
+                updates.status = 'active';
+                updates.tenancyStatus = 'ongoing';
+            } else {
+                updates.status = tenant.status === 'checked_out' ? 'checked_out' : 'in_progress';
+                updates.tenancyStatus = tenant.status === 'checked_out' ? tenant.tenancyStatus : 'onboarding';
+            }
         }
 
         if (Object.keys(updates).length === 0) {

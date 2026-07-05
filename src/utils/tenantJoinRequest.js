@@ -34,6 +34,7 @@ exports.createTenantJoinRequest = async ({ owner, tenant, property }) => {
         id: requestId,
         userIdIndex: owner.userId,
         propertyIdIndex: property.propertyId,
+        propertyName: property.propertyName || '',
         type: title,
         title,
         description,

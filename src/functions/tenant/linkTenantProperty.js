@@ -68,7 +68,7 @@ exports.handler = async (event) => {
 
         if (tenantResult.Items && tenantResult.Items.length > 0) {
             const alreadyLinked = tenantResult.Items.find(
-                t => t.propertyId === invite.propertyId && t.status === 'active'
+                t => t.propertyId === invite.propertyId && ['active', 'in_progress'].includes(t.status)
             );
             if (alreadyLinked) {
                 return response.success({

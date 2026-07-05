@@ -9,6 +9,10 @@ const { validateRequiredFields, sanitizeInput } = require('../../utils/validator
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
+function bedAssignmentId(roomId, bedNumber) {
+    return `reservation#${roomId}#${String(bedNumber).trim()}`;
+}
+
 exports.handler = async (event) => {
     try {
         console.log('Check-in tenant request received');
@@ -81,7 +85,7 @@ exports.handler = async (event) => {
 
         // ── Build all items for the atomic transaction ──
         const tenantId = uuidv4();
-        const assignmentId = uuidv4();
+        const assignmentId = bedAssignmentId(roomId, bedNumber);
         const timestamp = new Date().toISOString();
 
         const tenantItem = {
@@ -103,15 +107,15 @@ exports.handler = async (event) => {
             depositPaid: depositPaid || false,
             depositAmount: depositAmount || 0,
             depositDate: depositDate || null,
-            status: 'active',
-            tenancyStatus: 'ongoing',
+            status: 'in_progress',
+            tenancyStatus: 'onboarding',
             createdAt: timestamp,
             updatedAt: timestamp,
             // GSI attributes
             propertyIdIndex: propertyId,
             roomIdIndex: roomId,
             userIdIndex: userId,
-            statusIndex: 'active'
+            statusIndex: 'in_progress'
         };
 
         const assignmentItem = {
@@ -141,12 +145,42 @@ exports.handler = async (event) => {
                         ConditionExpression: 'attribute_not_exists(tenantId)'
                     }
                 },
-                // 2. Create bed assignment record
+                // 2. Create or claim the deterministic bed assignment record.
+                // The assignment id is based on room+bed so concurrent attempts
+                // for the same physical bed cannot both succeed.
                 {
-                    Put: {
+                    Update: {
                         TableName: process.env.BED_ASSIGNMENT_TABLE,
-                        Item: assignmentItem,
-                        ConditionExpression: 'attribute_not_exists(assignmentId)'
+                        Key: { assignmentId },
+                        UpdateExpression: [
+                            'SET tenantId = :tenantId',
+                            'propertyId = :propertyId',
+                            'roomId = :roomId',
+                            'bedNumber = :bedNumber',
+                            'assignedDate = :assignedDate',
+                            'releasedDate = :releasedDate',
+                            '#status = :assigned',
+                            'createdAt = if_not_exists(createdAt, :createdAt)',
+                            'updatedAt = :updatedAt',
+                            'roomIdIndex = :roomId',
+                            'tenantIdIndex = :tenantId',
+                        ].join(', '),
+                        ExpressionAttributeNames: { '#status': 'status' },
+                        ExpressionAttributeValues: {
+                            ':tenantId': assignmentItem.tenantId,
+                            ':propertyId': assignmentItem.propertyId,
+                            ':roomId': assignmentItem.roomId,
+                            ':bedNumber': assignmentItem.bedNumber,
+                            ':assignedDate': assignmentItem.assignedDate,
+                            ':releasedDate': null,
+                            ':assigned': 'assigned',
+                            ':released': 'released',
+                            ':expired': 'expired',
+                            ':cancelled': 'cancelled',
+                            ':createdAt': timestamp,
+                            ':updatedAt': timestamp,
+                        },
+                        ConditionExpression: 'attribute_not_exists(assignmentId) OR #status IN (:released, :expired, :cancelled)'
                     }
                 },
                 // 3. Update room occupancy (+1 occupied, -1 available)

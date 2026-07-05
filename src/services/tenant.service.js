@@ -31,7 +31,7 @@ exports.createTenant = async (tenantData) => {
             
             // KYC Documents
             kycDocuments: tenantData.kycDocuments || {},
-            kycStatus: 'pending', // pending, verified, rejected
+            kycStatus: tenantData.kycStatus || 'pending', // pending, submitted, verified, rejected
             
             // Tenancy Details
             checkInDate: tenantData.checkInDate,
@@ -45,8 +45,8 @@ exports.createTenant = async (tenantData) => {
             depositDate: tenantData.depositDate || null,
             
             // Status
-            status: 'active', // active, checked_out, suspended
-            tenancyStatus: 'ongoing', // ongoing, completed, terminated
+            status: tenantData.status || 'in_progress', // in_progress, active, checked_out, suspended
+            tenancyStatus: tenantData.tenancyStatus || 'onboarding', // onboarding, ongoing, completed, terminated
             
             // Metadata
             createdAt: timestamp,
@@ -56,7 +56,7 @@ exports.createTenant = async (tenantData) => {
             propertyIdIndex: tenantData.propertyId,
             roomIdIndex: tenantData.roomId,
             userIdIndex: tenantData.userId,
-            statusIndex: 'active'
+            statusIndex: tenantData.status || 'in_progress'
         };
 
         const params = {
@@ -134,13 +134,14 @@ exports.getActiveTenantsByRoom = async (roomId) => {
             TableName: TENANT_TABLE,
             IndexName: 'RoomIdIndex',
             KeyConditionExpression: 'roomIdIndex = :roomId',
-            FilterExpression: '#status = :status',
+            FilterExpression: '#status IN (:active, :inProgress)',
             ExpressionAttributeNames: {
                 '#status': 'status'
             },
             ExpressionAttributeValues: {
                 ':roomId': roomId,
-                ':status': 'active'
+                ':active': 'active',
+                ':inProgress': 'in_progress'
             }
         };
 
@@ -190,6 +191,16 @@ exports.updateTenant = async (tenantId, updates) => {
         if (updates.kycStatus !== undefined) {
             updateExpression += ', kycStatus = :kycStatus';
             expressionAttributeValues[':kycStatus'] = updates.kycStatus;
+        }
+
+        if (updates.kycReviewedAt !== undefined) {
+            updateExpression += ', kycReviewedAt = :kycReviewedAt';
+            expressionAttributeValues[':kycReviewedAt'] = updates.kycReviewedAt;
+        }
+
+        if (updates.kycReviewNotes !== undefined) {
+            updateExpression += ', kycReviewNotes = :kycReviewNotes';
+            expressionAttributeValues[':kycReviewNotes'] = updates.kycReviewNotes;
         }
 
         if (updates.rentAmount !== undefined) {
@@ -306,15 +317,23 @@ exports.checkOutTenant = async (tenantId, checkOutDate) => {
 /**
  * Generate presigned URL for KYC document upload
  */
-exports.generateUploadUrl = async (tenantId, documentType, fileExtension) => {
+exports.generateUploadUrl = async (tenantId, documentType, fileExtension, contentType = null) => {
     try {
-        const key = `kyc/${tenantId}/${documentType}-${Date.now()}.${fileExtension}`;
+        const normalizedExtension = String(fileExtension || '').toLowerCase().replace(/^\./, '');
+        const resolvedContentType = contentType || (
+            normalizedExtension === 'pdf'
+                ? 'application/pdf'
+                : normalizedExtension === 'jpg'
+                ? 'image/jpeg'
+                : `image/${normalizedExtension}`
+        );
+        const key = `kyc/${tenantId}/${documentType}-${Date.now()}.${normalizedExtension}`;
         
         const params = {
             Bucket: S3_BUCKET,
             Key: key,
             Expires: 300, // 5 minutes
-            ContentType: `image/${fileExtension}`
+            ContentType: resolvedContentType
         };
 
         const uploadUrl = await s3.getSignedUrlPromise('putObject', params);
@@ -322,7 +341,8 @@ exports.generateUploadUrl = async (tenantId, documentType, fileExtension) => {
         return {
             uploadUrl,
             key,
-            documentUrl: `https://${S3_BUCKET}.s3.amazonaws.com/${key}`
+            documentUrl: `https://${S3_BUCKET}.s3.amazonaws.com/${key}`,
+            contentType: resolvedContentType
         };
 
     } catch (error) {
@@ -340,13 +360,14 @@ exports.getTenantByUserId = async (userId) => {
             TableName: TENANT_TABLE,
             IndexName: 'UserIdIndex',
             KeyConditionExpression: 'userIdIndex = :userId',
-            FilterExpression: '#status = :status',
+            FilterExpression: '#status IN (:active, :inProgress)',
             ExpressionAttributeNames: {
                 '#status': 'status'
             },
             ExpressionAttributeValues: {
                 ':userId': userId,
-                ':status': 'active'
+                ':active': 'active',
+                ':inProgress': 'in_progress'
             }
         };
 
@@ -433,7 +454,9 @@ exports.releaseBed = async (assignmentId) => {
 };
 
 /**
- * Get bed assignments by room
+ * Get active bed assignments by room.
+ * Reserved beds are intentionally included because they must not be offered to
+ * another tenant while onboarding/KYC is still pending.
  */
 exports.getBedAssignmentsByRoom = async (roomId) => {
     try {
@@ -441,13 +464,14 @@ exports.getBedAssignmentsByRoom = async (roomId) => {
             TableName: BED_ASSIGNMENT_TABLE,
             IndexName: 'RoomIdIndex',
             KeyConditionExpression: 'roomIdIndex = :roomId',
-            FilterExpression: '#status = :status',
+            FilterExpression: '#status IN (:assigned, :reserved)',
             ExpressionAttributeNames: {
                 '#status': 'status'
             },
             ExpressionAttributeValues: {
                 ':roomId': roomId,
-                ':status': 'assigned'
+                ':assigned': 'assigned',
+                ':reserved': 'reserved'
             }
         };
 

@@ -3,6 +3,23 @@ const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
+const AWS = require('aws-sdk');
+
+const s3 = new AWS.S3();
+
+async function withKycViewUrls(tenant) {
+    const documents = tenant.kycDocuments || {};
+    const entries = await Promise.all(Object.entries(documents).map(async ([type, doc]) => {
+        if (!doc?.key) return [type, doc];
+        const viewUrl = await s3.getSignedUrlPromise('getObject', {
+            Bucket: process.env.S3_BUCKET,
+            Key: doc.key,
+            Expires: 900,
+        });
+        return [type, { ...doc, viewUrl }];
+    }));
+    return { ...tenant, kycDocuments: Object.fromEntries(entries) };
+}
 
 exports.handler = async (event) => {
     try {
@@ -34,10 +51,12 @@ exports.handler = async (event) => {
 
         const result = await tenantService.getTenantsByProperty(propertyId);
 
+        const tenants = await Promise.all((result.tenants || []).map(withKycViewUrls));
+
         return response.success({
             message: 'Tenants retrieved successfully',
-            tenants: result.tenants,
-            count: result.tenants.length,
+            tenants,
+            count: tenants.length,
             propertyId: propertyId
         });
 

@@ -24,7 +24,7 @@ exports.handler = async (event) => {
         // ── Auth (skip for scheduled invocations) ────────────────────────────
         let dbUser = null;
         if (!isScheduled) {
-            const dbUser = event.requestContext?.authorizer;
+            dbUser = event.requestContext?.authorizer;
         if (!dbUser) {
             return response.error('Unauthorized', 401);
         }

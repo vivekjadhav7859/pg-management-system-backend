@@ -26,7 +26,7 @@ exports.handler = async (event) => {
             ExpressionAttributeValues: { ':uid': userId },
         }).promise();
 
-        const tenant = (tenantResult.Items || []).find(t => t.status === 'active');
+        const tenant = (tenantResult.Items || []).find(t => ['active', 'in_progress'].includes(t.status));
 
         if (!tenant) {
             let linkedPropertyName = null;
@@ -170,7 +170,7 @@ exports.handler = async (event) => {
         }));
 
         return response.success({
-            status: 'active',
+            status: tenant.status || 'in_progress',
             tenant: {
                 tenantId: tenant.tenantId,
                 name: tenant.name,
@@ -182,6 +182,8 @@ exports.handler = async (event) => {
                 depositPaid: tenant.depositPaid,
                 bedNumber: tenant.bedNumber,
                 kycStatus: tenant.kycStatus,
+                status: tenant.status,
+                tenancyStatus: tenant.tenancyStatus,
                 emergencyContact: tenant.emergencyContact || {},
                 agreementStatus: tenant.agreementStatus || 'pending',
                 agreementSignedAt: tenant.agreementSignedAt || null,
