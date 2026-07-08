@@ -4,6 +4,17 @@ const cognito = new AWS.CognitoIdentityServiceProvider();
 const USER_POOL_ID = process.env.USER_POOL_ID;
 const USER_POOL_CLIENT_ID = process.env.USER_POOL_CLIENT_ID;
 
+const setPermanentPassword = async (email, password) => {
+    await cognito.adminSetUserPassword({
+        UserPoolId: USER_POOL_ID,
+        Username: email,
+        Password: password,
+        Permanent: true
+    }).promise();
+};
+
+exports.setUserPassword = setPermanentPassword;
+
 /**
  * Create a new user in Cognito with custom attributes
  */
@@ -47,12 +58,7 @@ exports.createUser = async (email, password, userAttributes = {}) => {
         const createUserResponse = await cognito.adminCreateUser(params).promise();
 
         // Set permanent password
-        await cognito.adminSetUserPassword({
-            UserPoolId: USER_POOL_ID,
-            Username: email,
-            Password: password,
-            Permanent: true
-        }).promise();
+        await setPermanentPassword(email, password);
 
         return {
             userId: createUserResponse.User.Username,
@@ -64,7 +70,9 @@ exports.createUser = async (email, password, userAttributes = {}) => {
         console.error('Error creating user in Cognito:', error);
         
         if (error.code === 'UsernameExistsException') {
-            throw new Error('User with this email already exists');
+            const usernameExistsError = new Error('User with this email already exists');
+            usernameExistsError.code = error.code;
+            throw usernameExistsError;
         }
         
         throw error;

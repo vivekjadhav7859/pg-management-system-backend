@@ -5,6 +5,7 @@ const { validateEmail, validateRequiredFields, sanitizeInput } = require('../../
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Login request received');
 
         // Parse request body

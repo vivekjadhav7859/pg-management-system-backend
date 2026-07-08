@@ -3,6 +3,7 @@ const response = require('../../utils/response');
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Refresh token request received');
 
         const body = JSON.parse(event.body);

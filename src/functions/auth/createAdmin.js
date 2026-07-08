@@ -10,6 +10,7 @@ const { validateEmail, validatePassword, validateRequiredFields, sanitizeInput }
  */
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Create admin request received');
 
         // STEP 1: Verify the requesting user is an admin

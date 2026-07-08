@@ -6,6 +6,7 @@ const { validateRequiredFields, sanitizeInput } = require('../../utils/validator
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Add room request received');
 
         // Verify token and get user info

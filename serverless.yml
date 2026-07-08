@@ -3,6 +3,18 @@ frameworkVersion: '4'
 
 custom:
   kycBucketName: ${self:service}-kyc-documents-${self:provider.stage}
+  allowedCorsOrigins:
+    - https://gobanqo.com
+    - https://www.gobanqo.com
+  corsConfig: &corsConfig
+    origins: ${self:custom.allowedCorsOrigins}
+    headers:
+      - Content-Type
+      - X-Amz-Date
+      - Authorization
+      - X-Api-Key
+      - X-Amz-Security-Token
+    allowCredentials: true
   prune:
     automatic: true
     number: 3
@@ -33,6 +45,7 @@ provider:
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
+    ALLOWED_CORS_ORIGINS: https://gobanqo.com,https://www.gobanqo.com
 
   logs:
     httpApi: true
@@ -142,7 +155,7 @@ functions:
       - http:
           path: auth/signup
           method: post
-          cors: true
+          cors: *corsConfig
 
   login:
     handler: src/functions/auth/login.handler
@@ -150,7 +163,7 @@ functions:
       - http:
           path: auth/login
           method: post
-          cors: true
+          cors: *corsConfig
 
   refreshToken:
     handler: src/functions/auth/refreshToken.handler
@@ -158,7 +171,7 @@ functions:
       - http:
           path: auth/refresh
           method: post
-          cors: true
+          cors: *corsConfig
 
   logout:
     handler: src/functions/auth/logout.handler
@@ -166,7 +179,7 @@ functions:
       - http:
           path: auth/logout
           method: post
-          cors: true
+          cors: *corsConfig
 
   verifyToken:
     handler: src/functions/auth/verifyToken.handler
@@ -174,7 +187,7 @@ functions:
       - http:
           path: auth/verify
           method: get
-          cors: true
+          cors: *corsConfig
 
   getProfile:
     handler: src/functions/auth/getProfile.handler
@@ -182,7 +195,7 @@ functions:
       - http:
           path: auth/profile
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -196,7 +209,7 @@ functions:
       - http:
           path: auth/profile
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -211,7 +224,7 @@ functions:
       - http:
           path: admin/create-user
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -226,7 +239,7 @@ functions:
       - http:
           path: properties
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -240,7 +253,7 @@ functions:
       - http:
           path: properties
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -254,7 +267,7 @@ functions:
       - http:
           path: properties/{propertyId}
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -268,7 +281,7 @@ functions:
       - http:
           path: upload/images/sign
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -282,7 +295,7 @@ functions:
       - http:
           path: properties/{propertyId}
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -296,7 +309,7 @@ functions:
       - http:
           path: properties/{propertyId}
           method: delete
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -311,7 +324,7 @@ functions:
       - http:
           path: properties/{propertyId}/rooms
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -325,7 +338,7 @@ functions:
       - http:
           path: properties/{propertyId}/rooms
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -339,7 +352,7 @@ functions:
       - http:
           path: rooms/{roomId}
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -353,7 +366,7 @@ functions:
       - http:
           path: rooms/{roomId}
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -367,7 +380,7 @@ functions:
       - http:
           path: rooms/{roomId}
           method: delete
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -382,7 +395,7 @@ functions:
       - http:
           path: tenants/check-in
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -396,7 +409,7 @@ functions:
       - http:
           path: properties/{propertyId}/tenants
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -410,7 +423,7 @@ functions:
       - http:
           path: tenants/{tenantId}
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -424,7 +437,7 @@ functions:
       - http:
           path: tenants/{tenantId}
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -438,7 +451,7 @@ functions:
       - http:
           path: tenants/{tenantId}/check-out
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -452,7 +465,7 @@ functions:
       - http:
           path: tenants/{tenantId}/kyc/upload-url
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -466,7 +479,7 @@ functions:
       - http:
           path: rooms/{roomId}/status
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -480,7 +493,7 @@ functions:
       - http:
           path: tenant/discover
           method: get
-          cors: true
+          cors: *corsConfig
 
   createBookingRequest:
     handler: src/functions/tenant/createBookingRequest.handler
@@ -488,7 +501,7 @@ functions:
       - http:
           path: tenant/booking-requests
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -502,7 +515,7 @@ functions:
       - http:
           path: tenant/agreement/sign
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -516,7 +529,7 @@ functions:
       - http:
           path: tenant/pay-rent
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -531,7 +544,7 @@ functions:
       - http:
           path: financial/rent/collect
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -548,7 +561,7 @@ functions:
       - http:
           path: financial/generate-bills
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -568,7 +581,7 @@ functions:
       - http:
           path: properties/{propertyId}/rent-payments
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -582,7 +595,7 @@ functions:
       - http:
           path: financial/payments/{paymentId}
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -597,7 +610,7 @@ functions:
       - http:
           path: financial/expenses
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -611,7 +624,7 @@ functions:
       - http:
           path: properties/{propertyId}/expenses
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -625,7 +638,7 @@ functions:
       - http:
           path: financial/expenses/{expenseId}
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -639,7 +652,7 @@ functions:
       - http:
           path: financial/expenses/{expenseId}
           method: delete
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -654,7 +667,7 @@ functions:
       - http:
           path: properties/{propertyId}/financial-report
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -670,7 +683,7 @@ functions:
       - http:
           path: financial/send-reminder
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -685,7 +698,7 @@ functions:
       - http:
           path: properties/{propertyId}/reminder-settings/test
           method: post
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -699,7 +712,7 @@ functions:
       - http:
           path: properties/{propertyId}/reminder-settings
           method: get
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -713,7 +726,7 @@ functions:
       - http:
           path: properties/{propertyId}/reminder-settings
           method: put
-          cors: true
+          cors: *corsConfig
 
           authorizer:
             name: authorizer
@@ -728,7 +741,7 @@ functions:
       - http:
           path: search
           method: get
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -741,7 +754,7 @@ functions:
       - http:
           path: notifications
           method: get
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -754,7 +767,7 @@ functions:
       - http:
           path: notifications/{id}/read
           method: put
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -767,7 +780,7 @@ functions:
       - http:
           path: notifications/read-all
           method: put
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -780,7 +793,7 @@ functions:
       - http:
           path: notifications/{id}/unread
           method: put
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -793,7 +806,7 @@ functions:
       - http:
           path: notifications/{id}
           method: delete
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -807,7 +820,7 @@ functions:
       - http:
           path: properties/{propertyId}/complaints
           method: post
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -820,7 +833,7 @@ functions:
       - http:
           path: properties/{propertyId}/complaints
           method: get
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -833,7 +846,7 @@ functions:
       - http:
           path: properties/{propertyId}/complaints/{complaintId}/status
           method: put
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -847,7 +860,7 @@ functions:
       - http:
           path: properties/{propertyId}/invite-code
           method: post
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -860,7 +873,7 @@ functions:
       - http:
           path: properties/{propertyId}/invite-code
           method: get
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -873,7 +886,7 @@ functions:
       - http:
           path: invite-code/validate
           method: post
-          cors: true
+          cors: *corsConfig
 
   linkTenantProperty:
     handler: src/functions/tenant/linkTenantProperty.handler
@@ -881,7 +894,7 @@ functions:
       - http:
           path: tenant/link-property
           method: post
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -894,7 +907,7 @@ functions:
       - http:
           path: tenant/dashboard
           method: get
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -907,7 +920,7 @@ functions:
       - http:
           path: requests
           method: get
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -920,7 +933,7 @@ functions:
       - http:
           path: requests/{requestId}/status
           method: put
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -957,7 +970,7 @@ functions:
       - http:
           path: notifications/broadcast
           method: post
-          cors: true
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -1254,8 +1267,7 @@ resources:
         BucketName: ${self:custom.kycBucketName}
         CorsConfiguration:
           CorsRules:
-            - AllowedOrigins:
-                - '*'
+            - AllowedOrigins: ${self:custom.allowedCorsOrigins}
               AllowedMethods:
                 - GET
                 - PUT
