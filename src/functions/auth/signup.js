@@ -1,10 +1,11 @@
-const { createUser } = require('../../services/cognito.service');
+const { createUser, getUserDetails, setUserPassword } = require('../../services/cognito.service');
 const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateEmail, validatePassword, validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Signup request received');
 
         // Parse request body
@@ -49,15 +50,51 @@ exports.handler = async (event) => {
         }
 
         // Create user in Cognito with custom attributes
-        const cognitoUser = await createUser(
-            sanitizedEmail, 
-            password,
-            {
-                name: sanitizedName,
-                phone_number: sanitizedPhone,
-                userType: sanitizedUserType
+        let cognitoUser;
+        try {
+            cognitoUser = await createUser(
+                sanitizedEmail, 
+                password,
+                {
+                    name: sanitizedName,
+                    phone_number: sanitizedPhone,
+                    userType: sanitizedUserType
+                }
+            );
+        } catch (err) {
+            if (err.code !== 'UsernameExistsException') {
+                throw err;
             }
-        );
+
+            const existingDbUser = await dynamoService.getUserByEmail(sanitizedEmail);
+            if (existingDbUser) {
+                throw err;
+            }
+
+            console.warn('Cognito user exists without database profile. Recreating database profile:', sanitizedEmail);
+            const existingCognitoUser = await getUserDetails(sanitizedEmail);
+            await setUserPassword(sanitizedEmail, password);
+            const repairedUser = await dynamoService.createUser({
+                cognitoUserId: existingCognitoUser.userId,
+                email: sanitizedEmail,
+                name: sanitizedName || existingCognitoUser.name,
+                phoneNumber: sanitizedPhone || existingCognitoUser.phoneNumber,
+                userType: sanitizedUserType
+            });
+
+            return response.success({
+                message: 'User registered successfully',
+                user: {
+                    userId: repairedUser.userId,
+                    email: repairedUser.email,
+                    name: repairedUser.name,
+                    phoneNumber: repairedUser.phoneNumber,
+                    userType: repairedUser.userType,
+                    status: repairedUser.status,
+                    createdAt: repairedUser.createdAt
+                }
+            }, 201);
+        }
 
         console.log('Cognito user created:', cognitoUser.userId);
 

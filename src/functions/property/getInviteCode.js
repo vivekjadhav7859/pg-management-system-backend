@@ -5,6 +5,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         const { userId, userType } = event.requestContext.authorizer;
         if (userType !== 'owner' && userType !== 'admin') {
             return response.error('Forbidden', 403);

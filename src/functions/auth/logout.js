@@ -3,6 +3,7 @@ const response = require('../../utils/response');
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Logout request received');
 
         // Extract access token from Authorization header

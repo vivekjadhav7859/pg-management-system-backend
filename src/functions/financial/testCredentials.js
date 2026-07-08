@@ -14,6 +14,7 @@ const response = require('../../utils/response');
  */
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         // Auth check
         const dbUser = event.requestContext?.authorizer;
         if (!dbUser) {
