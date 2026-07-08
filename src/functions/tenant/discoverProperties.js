@@ -9,6 +9,7 @@ const ROOM_TABLE = process.env.ROOM_TABLE;
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         const query = event.queryStringParameters || {};
         const city = (query.city || '').trim().toLowerCase();
         const search = (query.search || '').trim().toLowerCase();

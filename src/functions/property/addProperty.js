@@ -7,6 +7,7 @@ const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propert
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Add property request received');
 
         // Verify token and get user info

@@ -5,6 +5,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         const body = JSON.parse(event.body || '{}');
         const code = (body.code || '').trim().toUpperCase();
 

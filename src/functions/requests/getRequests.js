@@ -7,6 +7,7 @@ const REQUEST_ENTITY_TYPES = new Set(['bookingRequest', 'complaint', 'tenantJoin
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         const dbUser = event.requestContext?.authorizer;
         if (!dbUser) return response.error('Unauthorized', 401);
         if (dbUser.userType !== 'owner' && dbUser.userType !== 'admin') {

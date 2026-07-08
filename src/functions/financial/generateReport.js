@@ -6,6 +6,7 @@ const response = require('../../utils/response');
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         const dbUser = event.requestContext?.authorizer;
         if (!dbUser) {
             return response.error('Unauthorized', 401);

@@ -10,6 +10,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         const dbUser = event.requestContext?.authorizer;
         if (!dbUser) return response.error('Unauthorized', 401);
         if (dbUser.userType !== 'tenant') {

@@ -3,6 +3,7 @@ const response = require('../../utils/response');
 
 exports.handler = async (event) => {
   try {
+        response.setCorsOrigin(event);
     const user = event.requestContext?.authorizer;
     if (!user) return response.error('Unauthorized', 401);
 

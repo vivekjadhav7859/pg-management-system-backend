@@ -15,6 +15,7 @@ function bedAssignmentId(roomId, bedNumber) {
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Check-in tenant request received');
 
         const dbUser = event.requestContext?.authorizer;

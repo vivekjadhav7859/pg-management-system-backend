@@ -18,6 +18,7 @@ const response = require('../../utils/response');
  */
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         // ── Determine invocation source ─────────────────────────────────────
         const isScheduled = event?.source === 'scheduled' || event?.source === 'aws.events';
 

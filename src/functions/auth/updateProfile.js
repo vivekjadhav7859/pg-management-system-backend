@@ -5,6 +5,7 @@ const { sanitizeInput, validatePhoneNumber } = require('../../utils/validator');
 
 exports.handler = async (event) => {
     try {
+        response.setCorsOrigin(event);
         console.log('Update profile request received');
 
         // Extract access token from Authorization header
