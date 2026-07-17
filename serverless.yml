@@ -1027,6 +1027,9 @@ resources:
         ClientName: pg-mgmt-client-${self:provider.stage}
         UserPoolId: !Ref CognitoUserPool
         GenerateSecret: false
+        RefreshTokenValidity: 3650
+        TokenValidityUnits:
+          RefreshToken: days
         ExplicitAuthFlows:
           - ADMIN_NO_SRP_AUTH
           - USER_PASSWORD_AUTH
