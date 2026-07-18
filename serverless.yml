@@ -1,5 +1,6 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+# org: shoukat
 service: pg-management-backend
-frameworkVersion: '4'
 
 custom:
   kycBucketName: ${self:service}-kyc-documents-${self:provider.stage}
@@ -146,6 +147,14 @@ build:
       - aws-sdk
 
 functions:
+  cognitoCustomMessage:
+    handler: src/functions/auth/customMessage.handler
+    events:
+      - cognitoUserPool:
+          pool: pg-mgmt-user-pool-${self:provider.stage}
+          trigger: CustomMessage
+          existing: true
+
   authorizer:
     handler: src/functions/auth/authorizer.handler
   # ============ AUTH ENDPOINTS ============
@@ -178,6 +187,40 @@ functions:
     events:
       - http:
           path: auth/logout
+          method: post
+          cors: *corsConfig
+
+  # ─── Forgot Password ────────────────────────────────────────────────────────
+  forgotPassword:
+    handler: src/functions/auth/forgotPassword.handler
+    events:
+      - http:
+          path: auth/forgot-password
+          method: post
+          cors: *corsConfig
+
+  confirmForgotPassword:
+    handler: src/functions/auth/confirmForgotPassword.handler
+    events:
+      - http:
+          path: auth/confirm-forgot-password
+          method: post
+          cors: *corsConfig
+
+  # ─── Email Verification ─────────────────────────────────────────────────────
+  verifyEmail:
+    handler: src/functions/auth/verifyEmail.handler
+    events:
+      - http:
+          path: auth/verify-email
+          method: post
+          cors: *corsConfig
+
+  resendVerification:
+    handler: src/functions/auth/resendVerification.handler
+    events:
+      - http:
+          path: auth/resend-verification
           method: post
           cors: *corsConfig
 
@@ -1027,6 +1070,9 @@ resources:
         ClientName: pg-mgmt-client-${self:provider.stage}
         UserPoolId: !Ref CognitoUserPool
         GenerateSecret: false
+        RefreshTokenValidity: 3650
+        TokenValidityUnits:
+          RefreshToken: days
         ExplicitAuthFlows:
           - ADMIN_NO_SRP_AUTH
           - USER_PASSWORD_AUTH

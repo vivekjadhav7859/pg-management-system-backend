@@ -165,6 +165,108 @@ exports.refreshToken = async (refreshToken) => {
 };
 
 /**
+ * Sign up a new user (client-side flow — sends verification email)
+ */
+exports.signUpUser = async (email, password, userAttributes = {}) => {
+    try {
+        const attributes = [
+            { Name: 'email', Value: email }
+        ];
+
+        if (userAttributes.name) {
+            attributes.push({ Name: 'name', Value: userAttributes.name });
+        }
+        if (userAttributes.phone_number) {
+            attributes.push({ Name: 'phone_number', Value: userAttributes.phone_number });
+        }
+
+        const params = {
+            ClientId: USER_POOL_CLIENT_ID,
+            Username: email,
+            Password: password,
+            UserAttributes: attributes
+        };
+
+        const response = await cognito.signUp(params).promise();
+        return {
+            userId: response.UserSub,
+            email: email,
+            confirmed: response.UserConfirmed
+        };
+    } catch (error) {
+        console.error('Error signing up user:', error);
+        throw error;
+    }
+};
+
+/**
+ * Confirm user email with OTP code from verification email
+ */
+exports.confirmUserEmail = async (email, confirmationCode) => {
+    try {
+        const params = {
+            ClientId: USER_POOL_CLIENT_ID,
+            Username: email,
+            ConfirmationCode: confirmationCode
+        };
+        await cognito.confirmSignUp(params).promise();
+    } catch (error) {
+        console.error('Error confirming user email:', error);
+        throw error;
+    }
+};
+
+/**
+ * Resend email verification code
+ */
+exports.resendConfirmationCode = async (email) => {
+    try {
+        const params = {
+            ClientId: USER_POOL_CLIENT_ID,
+            Username: email
+        };
+        await cognito.resendConfirmationCode(params).promise();
+    } catch (error) {
+        console.error('Error resending confirmation code:', error);
+        throw error;
+    }
+};
+
+/**
+ * Initiate forgot password flow — sends OTP to user's email
+ */
+exports.forgotPassword = async (email) => {
+    try {
+        const params = {
+            ClientId: USER_POOL_CLIENT_ID,
+            Username: email
+        };
+        await cognito.forgotPassword(params).promise();
+    } catch (error) {
+        console.error('Error initiating forgot password:', error);
+        throw error;
+    }
+};
+
+/**
+ * Confirm forgot password — verifies OTP and sets new password
+ */
+exports.confirmForgotPassword = async (email, confirmationCode, newPassword) => {
+    try {
+        const params = {
+            ClientId: USER_POOL_CLIENT_ID,
+            Username: email,
+            ConfirmationCode: confirmationCode,
+            Password: newPassword
+        };
+        await cognito.confirmForgotPassword(params).promise();
+    } catch (error) {
+        console.error('Error confirming forgot password:', error);
+        throw error;
+    }
+};
+
+/**
  * Logout user (global sign out)
  */
 exports.logoutUser = async (accessToken) => {
