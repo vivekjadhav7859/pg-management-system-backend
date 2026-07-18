@@ -25,12 +25,21 @@ exports.handler = async (event) => {
         }
 
         // Sanitize email
-        const sanitizedEmail = sanitizeInput(email.toLowerCase());
+        const sanitizedEmail = email.toLowerCase().trim();
 
         // Authenticate user with Cognito
-        const authResult = await loginUser(sanitizedEmail, password);
+        let authResult;
+        try {
+            authResult = await loginUser(sanitizedEmail, password);
+        } catch (cognitoErr) {
+            // Distinguish unverified users so frontend can redirect to /verify-email
+            if (cognitoErr.code === 'UserNotConfirmedException') {
+                return response.error('Email not verified. Please check your inbox for a verification code.', 403, { code: 'USER_NOT_VERIFIED', email: sanitizedEmail });
+            }
+            throw cognitoErr;
+        }
 
-        console.log('Login successful for user:', sanitizedEmail);
+        console.log('Login successful');
 
         // Get user details from DynamoDB
         const dbUser = await dynamoService.getUserByEmail(sanitizedEmail);
@@ -38,6 +47,12 @@ exports.handler = async (event) => {
         if (!dbUser) {
             console.warn('User authenticated but not found in database:', sanitizedEmail);
             return response.error('User data not found', 404);
+        }
+
+        // Block login if email not verified (new users via signUp flow)
+        // emailVerified === false means explicitly set; undefined = legacy admin-created user (allow)
+        if (dbUser.emailVerified === false) {
+            return response.error('Email not verified. Please check your inbox for a verification code.', 403, { code: 'USER_NOT_VERIFIED', email: sanitizedEmail });
         }
 
         // Check if user account is active

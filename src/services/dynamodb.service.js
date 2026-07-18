@@ -20,7 +20,7 @@ exports.createUser = async (userData) => {
             phoneNumber: userData.phoneNumber || null,
             userType: userData.userType || 'tenant', // tenant, owner, admin
             status: 'active',
-            emailVerified: true,
+            emailVerified: userData.emailVerified !== undefined ? userData.emailVerified : true,
             createdAt: timestamp,
             updatedAt: timestamp,
             
@@ -55,8 +55,24 @@ exports.createUser = async (userData) => {
 };
 
 /**
- * Get user by userId
+ * Mark user email as verified (called after OTP confirmation)
  */
+exports.updateEmailVerified = async (userId) => {
+    try {
+        const timestamp = new Date().toISOString();
+        const params = {
+            TableName: USER_TABLE,
+            Key: { userId },
+            UpdateExpression: 'SET emailVerified = :v, updatedAt = :t',
+            ExpressionAttributeValues: { ':v': true, ':t': timestamp }
+        };
+        await dynamodb.update(params).promise();
+    } catch (error) {
+        console.error('Error updating emailVerified:', error);
+        throw error;
+    }
+};
+
 exports.getUserById = async (userId) => {
     try {
         const params = {

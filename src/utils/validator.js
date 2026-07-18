@@ -103,15 +103,9 @@ exports.sanitizeInput = (input) => {
     if (typeof input !== 'string') {
         return input;
     }
-    
-    return input
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#x27;')
-        .replace(/\//g, '&#x2F;')
-        .trim();
+    // Trim only. HTML-encoding is inappropriate for a JSON API — it corrupts
+    // values stored in Cognito and DynamoDB (e.g. O'Brien, a+b@x.com).
+    return input.trim();
 };
 
 /**
