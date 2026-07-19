@@ -2,6 +2,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -21,6 +22,10 @@ exports.handler = async (event) => {
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only delete your own properties', 403);
         }
+
+        // Removing a property must stay available while over a downgraded plan limit.
+        const subscriptionDenied = await guardOwnerWrite(event, { allowWhenLocked: true, startTrial: false });
+        if (subscriptionDenied) return subscriptionDenied;
 
         // Check if property has active tenants
         if (property.occupiedBeds > 0) {

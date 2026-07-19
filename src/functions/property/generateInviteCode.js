@@ -1,5 +1,6 @@
 const AWS = require('aws-sdk');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -18,6 +19,9 @@ exports.handler = async (event) => {
         if (userType !== 'owner' && userType !== 'admin') {
             return response.error('Forbidden', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const { propertyId } = event.pathParameters || {};
         if (!propertyId) return response.error('propertyId required', 400);

@@ -25,6 +25,9 @@ provider:
   runtime: nodejs20.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
+  # Keep functions on $LATEST. Publishing a version for every function adds one
+  # CloudFormation resource each and pushes this stack past AWS's 500-resource limit.
+  versionFunctions: false
 
   environment:
     STAGE: ${self:provider.stage}
@@ -43,10 +46,25 @@ provider:
     COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
     INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
     EMAIL_LOG_TABLE: ${self:service}-email-logs-${self:provider.stage}
+    SUBSCRIPTION_TABLE: ${self:service}-subscriptions-${self:provider.stage}
+    WEBHOOK_EVENT_TABLE: ${self:service}-webhook-events-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
     SES_REGION: ${self:provider.region}
     ALLOWED_CORS_ORIGINS: https://gobanqo.com,https://www.gobanqo.com
+    SUBSCRIPTION_TRIAL_DAYS: ${env:SUBSCRIPTION_TRIAL_DAYS, '30'}
+    SUBSCRIPTION_TRIAL_PROPERTY_LIMIT: ${env:SUBSCRIPTION_TRIAL_PROPERTY_LIMIT, '1'}
+    RAZORPAY_KEY_ID: ${env:RAZORPAY_KEY_ID, ''}
+    RAZORPAY_KEY_SECRET: ${env:RAZORPAY_KEY_SECRET, ''}
+    RAZORPAY_WEBHOOK_SECRET: ${env:RAZORPAY_WEBHOOK_SECRET, ''}
+    RAZORPAY_PLAN_BASIC_ANNUAL: ${env:RAZORPAY_PLAN_BASIC_ANNUAL, ''}
+    RAZORPAY_PLAN_SILVER_ANNUAL: ${env:RAZORPAY_PLAN_SILVER_ANNUAL, ''}
+    RAZORPAY_PLAN_GOLD_ANNUAL: ${env:RAZORPAY_PLAN_GOLD_ANNUAL, ''}
+    RAZORPAY_PLAN_PLATINUM_ANNUAL: ${env:RAZORPAY_PLAN_PLATINUM_ANNUAL, ''}
+    PLAN_BASIC_ANNUAL_AMOUNT: ${env:PLAN_BASIC_ANNUAL_AMOUNT, '299900'}
+    PLAN_SILVER_ANNUAL_AMOUNT: ${env:PLAN_SILVER_ANNUAL_AMOUNT, '499900'}
+    PLAN_GOLD_ANNUAL_AMOUNT: ${env:PLAN_GOLD_ANNUAL_AMOUNT, '799900'}
+    PLAN_PLATINUM_ANNUAL_AMOUNT: ${env:PLAN_PLATINUM_ANNUAL_AMOUNT, '1199900'}
 
   logs:
     httpApi: true
@@ -101,6 +119,9 @@ provider:
             - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
             - !GetAtt EmailLogsTable.Arn
             - !Sub "${EmailLogsTable.Arn}/index/*"
+            - !GetAtt SubscriptionsTable.Arn
+            - !Sub "${SubscriptionsTable.Arn}/index/*"
+            - !GetAtt WebhookEventsTable.Arn
 
         # DynamoDB Streams read permission
         - Effect: Allow
@@ -275,6 +296,84 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  # ============ OWNER SUBSCRIPTIONS ============
+  getSubscriptionStatus:
+    handler: src/functions/subscription/getStatus.handler
+    events:
+      - http:
+          path: subscriptions/status
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  startSubscriptionTrial:
+    handler: src/functions/subscription/startTrial.handler
+    events:
+      - http:
+          path: subscriptions/trial
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  createSubscriptionCheckout:
+    handler: src/functions/subscription/createCheckout.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/checkout
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  verifySubscriptionCheckout:
+    handler: src/functions/subscription/verifyCheckout.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/verify
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  cancelSubscription:
+    handler: src/functions/subscription/cancelSubscription.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/cancel
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  razorpaySubscriptionWebhook:
+    handler: src/functions/subscription/webhook.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/webhook
+          method: post
+          cors: *corsConfig
+
   # ============ PROPERTY MANAGEMENT ENDPOINTS ============
   addProperty:
     handler: src/functions/property/addProperty.handler
@@ -312,6 +411,19 @@ functions:
           method: get
           cors: *corsConfig
 
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  activatePropertyManagement:
+    handler: src/functions/property/activateManagement.handler
+    events:
+      - http:
+          path: properties/{propertyId}/activate-management
+          method: post
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -1598,6 +1710,58 @@ resources:
               ProjectionType: ALL
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # One current subscription/trial record per owner.
+    SubscriptionsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-subscriptions-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: ownerId
+            AttributeType: S
+          - AttributeName: razorpaySubscriptionId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ownerId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: RazorpaySubscriptionIdIndex
+            KeySchema:
+              - AttributeName: razorpaySubscriptionId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Razorpay can retry and reorder webhooks; event IDs make processing idempotent.
+    WebhookEventsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-webhook-events-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: eventId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: eventId
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
         Tags:
           - Key: Environment
             Value: ${self:provider.stage}

@@ -32,6 +32,9 @@ exports.createProperty = async (propertyData) => {
             amenities: propertyData.amenities || [],
             rules: propertyData.rules || [],
             images: propertyData.images || [],
+            // Discovery-only listings remain free. Existing records without this
+            // field are treated as managed properties for backwards compatibility.
+            managementEnabled: propertyData.managementEnabled !== false,
             status: 'active', // active, inactive, maintenance
             createdAt: timestamp,
             updatedAt: timestamp,
@@ -166,6 +169,11 @@ exports.updateProperty = async (propertyId, updates) => {
         if (updates.images !== undefined) {
             updateExpression += ', images = :images';
             expressionAttributeValues[':images'] = updates.images;
+        }
+
+        if (updates.managementEnabled !== undefined) {
+            updateExpression += ', managementEnabled = :managementEnabled';
+            expressionAttributeValues[':managementEnabled'] = updates.managementEnabled;
         }
 
         if (updates.status !== undefined) {
