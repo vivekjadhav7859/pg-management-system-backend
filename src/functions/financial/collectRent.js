@@ -5,6 +5,7 @@ const tenantService = require('../../services/tenant.service');
 const financialService = require('../../services/financial.service');
 const response = require('../../utils/response');
 const { validateRequiredFields } = require('../../utils/validator');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -17,6 +18,9 @@ exports.handler = async (event) => {
         if (dbUser.userType !== 'owner' && dbUser.userType !== 'admin') {
             return response.error('Only owners can collect rent', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const body = JSON.parse(event.body);
         const { 

@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
 const { sanitizeInput } = require('../../utils/validator');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -25,6 +26,9 @@ exports.handler = async (event) => {
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only update tenants of your properties', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const body = JSON.parse(event.body);
         const updates = {};
