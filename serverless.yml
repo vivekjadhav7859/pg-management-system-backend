@@ -57,10 +57,6 @@ provider:
     RAZORPAY_KEY_ID: ${env:RAZORPAY_KEY_ID, ''}
     RAZORPAY_KEY_SECRET: ${env:RAZORPAY_KEY_SECRET, ''}
     RAZORPAY_WEBHOOK_SECRET: ${env:RAZORPAY_WEBHOOK_SECRET, ''}
-    RAZORPAY_PLAN_BASIC_ANNUAL: ${env:RAZORPAY_PLAN_BASIC_ANNUAL, ''}
-    RAZORPAY_PLAN_SILVER_ANNUAL: ${env:RAZORPAY_PLAN_SILVER_ANNUAL, ''}
-    RAZORPAY_PLAN_GOLD_ANNUAL: ${env:RAZORPAY_PLAN_GOLD_ANNUAL, ''}
-    RAZORPAY_PLAN_PLATINUM_ANNUAL: ${env:RAZORPAY_PLAN_PLATINUM_ANNUAL, ''}
     PLAN_BASIC_ANNUAL_AMOUNT: ${env:PLAN_BASIC_ANNUAL_AMOUNT, '299900'}
     PLAN_SILVER_ANNUAL_AMOUNT: ${env:PLAN_SILVER_ANNUAL_AMOUNT, '499900'}
     PLAN_GOLD_ANNUAL_AMOUNT: ${env:PLAN_GOLD_ANNUAL_AMOUNT, '799900'}
@@ -354,21 +350,7 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
-  cancelSubscription:
-    handler: src/functions/subscription/cancelSubscription.handler
-    timeout: 29
-    events:
-      - http:
-          path: subscriptions/cancel
-          method: post
-          cors: *corsConfig
-          authorizer:
-            name: authorizer
-            resultTtlInSeconds: 0
-            identitySource: method.request.header.Authorization
-            type: token
-
-  razorpaySubscriptionWebhook:
+  razorpayPaymentWebhook:
     handler: src/functions/subscription/webhook.handler
     timeout: 29
     events:
@@ -1719,7 +1701,7 @@ resources:
           - Key: Service
             Value: ${self:service}
 
-    # One current subscription/trial record per owner.
+    # One current prepaid entitlement/trial record per owner.
     SubscriptionsTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: Retain
@@ -1729,18 +1711,9 @@ resources:
         AttributeDefinitions:
           - AttributeName: ownerId
             AttributeType: S
-          - AttributeName: razorpaySubscriptionId
-            AttributeType: S
         KeySchema:
           - AttributeName: ownerId
             KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: RazorpaySubscriptionIdIndex
-            KeySchema:
-              - AttributeName: razorpaySubscriptionId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
         Tags:

@@ -12,6 +12,10 @@ jobs:
     environment: 
       name: production
       url: https://api.yourpgapp.com
+    env:
+      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
 
     steps:
       - name: Checkout code
@@ -35,6 +39,24 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
+
+      - name: Validate prepaid payment configuration
+        shell: bash
+        run: |
+          required=(
+            RAZORPAY_KEY_ID
+            RAZORPAY_KEY_SECRET
+            RAZORPAY_WEBHOOK_SECRET
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "Missing PRODUCTION environment secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "Razorpay prepaid payment configuration is present."
 
       - name: Run tests (if available)
         run: |

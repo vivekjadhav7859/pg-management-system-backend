@@ -23,7 +23,8 @@ exports.handler = async (event) => {
         console.error('Create subscription checkout error:', error);
         const knownErrors = new Set([
             'INVALID_PLAN', 'PLAN_NOT_CONFIGURED', 'RAZORPAY_NOT_CONFIGURED',
-            'ALREADY_SUBSCRIBED', 'PLAN_CONFIGURATION_MISMATCH'
+            'PLAN_CONFIGURATION_MISMATCH', 'PREPAID_PLAN_ALREADY_PURCHASED',
+            'PAYMENT_ALREADY_PENDING'
         ]);
         const statusCode = knownErrors.has(error.code) ? 400 : 502;
         return response.error(error.message || 'Failed to create subscription checkout', statusCode, {

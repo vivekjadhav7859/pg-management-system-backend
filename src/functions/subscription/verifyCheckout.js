@@ -8,14 +8,14 @@ exports.handler = async (event) => {
         if (!dbUser) return response.error('Unauthorized', 401);
 
         const body = JSON.parse(event.body || '{}');
-        const required = ['razorpay_payment_id', 'razorpay_subscription_id', 'razorpay_signature'];
+        const required = ['razorpay_payment_id', 'razorpay_order_id', 'razorpay_signature'];
         if (required.some(field => !body[field])) {
             return response.error('Incomplete Razorpay verification payload', 400);
         }
 
         const status = await subscriptionService.verifyCheckout(dbUser.userId, body);
         return response.success({
-            message: 'Subscription verified successfully',
+            message: 'Prepaid annual payment verified successfully',
             subscription: status
         });
     } catch (error) {
