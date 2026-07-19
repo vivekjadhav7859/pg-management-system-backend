@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 /**
  * POST /properties/{propertyId}/reminder-settings/test
@@ -35,6 +36,9 @@ exports.handler = async (event) => {
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only configure settings for your properties', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         // Parse SMTP config from body
         const body = JSON.parse(event.body);

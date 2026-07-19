@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
 const { sanitizeInput } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -22,6 +23,12 @@ exports.handler = async (event) => {
 
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only update your own properties', 403);
+        }
+
+        // Discovery-only listing edits are never paywalled.
+        if (property.managementEnabled !== false) {
+            const subscriptionDenied = await guardOwnerWrite(event);
+            if (subscriptionDenied) return subscriptionDenied;
         }
 
         const body = JSON.parse(event.body);

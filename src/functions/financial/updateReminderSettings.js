@@ -3,6 +3,7 @@ const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const financialService = require('../../services/financial.service');
 const { encryptSecret } = require('../../utils/crypto');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 const response = require('../../utils/response');
 
 exports.handler = async (event) => {
@@ -28,6 +29,9 @@ exports.handler = async (event) => {
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only update settings for your properties', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const body = JSON.parse(event.body);
         const { autoEnabled, daysBefore, daysAfter, channels, emailConfig } = body;

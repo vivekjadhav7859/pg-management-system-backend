@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const financialService = require('../../services/financial.service');
 const { buildTransporter, logEmail, delay, getBroadcastTemplate } = require('../../utils/emailHelper');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const USER_TABLE = process.env.USER_TABLE;
@@ -19,6 +20,9 @@ exports.handler = async (event) => {
         if (userType !== 'owner' && userType !== 'admin') {
             return response.error('Forbidden', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const body = JSON.parse(event.body || '{}');
         const { subject, message, propertyId } = body;

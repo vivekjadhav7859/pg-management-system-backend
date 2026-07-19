@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const response = require('../../utils/response');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -70,6 +71,9 @@ exports.handler = async (event) => {
         if (dbUser.userType !== 'owner' && dbUser.userType !== 'admin') {
             return response.error('Only owners can update requests', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const requestId = event.pathParameters?.requestId;
         const body = JSON.parse(event.body || '{}');

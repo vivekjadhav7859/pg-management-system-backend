@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
+const subscriptionService = require('../../services/subscription.service');
 
 exports.handler = async (event) => {
     try {
@@ -36,7 +37,8 @@ exports.handler = async (event) => {
             totalBeds,
             amenities,
             rules,
-            images
+            images,
+            managementEnabled = true
         } = body;
 
         // Validate required fields
@@ -60,6 +62,19 @@ exports.handler = async (event) => {
             return response.error(`Invalid property type. Must be one of: ${validPropertyTypes.join(', ')}`, 400);
         }
 
+        // A discovery-only listing is always free. A valid management activation
+        // starts the account's one-time trial and enforces its property limit.
+        if (managementEnabled !== false && dbUser.userType !== 'admin') {
+            try {
+                await subscriptionService.assertCanAddManagedProperty(dbUser.userId);
+            } catch (error) {
+                if (error instanceof subscriptionService.SubscriptionAccessError) {
+                    return response.error(error.message, error.statusCode, error.details);
+                }
+                throw error;
+            }
+        }
+
         // Sanitize inputs
         const sanitizedPropertyName = sanitizeInput(propertyName);
         const sanitizedAddress = {
@@ -80,7 +95,8 @@ exports.handler = async (event) => {
             totalBeds: totalBeds || 0,
             amenities: amenities || [],
             rules: rules || [],
-            images: normalizeImageKeys(images || [])
+            images: normalizeImageKeys(images || []),
+            managementEnabled: managementEnabled !== false
         });
 
         console.log('Property created successfully:', property.propertyId);
@@ -103,6 +119,7 @@ exports.handler = async (event) => {
                 images: signedProperty.images,
                 imageKeys: signedProperty.imageKeys,
                 status: signedProperty.status,
+                managementEnabled: signedProperty.managementEnabled,
                 createdAt: signedProperty.createdAt
             }
         }, 201);
