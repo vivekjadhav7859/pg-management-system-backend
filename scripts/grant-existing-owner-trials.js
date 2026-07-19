@@ -224,3 +224,4 @@ run().catch(error => {
     console.error(`Trial migration failed: ${error.message}`);
     process.exitCode = 1;
 });
+
