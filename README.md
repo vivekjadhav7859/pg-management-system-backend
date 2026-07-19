@@ -68,30 +68,30 @@ Now you can invoke the function as before, but this time the function will be ex
 
 When you are done developing, don't forget to run `serverless deploy` to deploy the function to the cloud.
 
-## Razorpay owner subscriptions
+## Razorpay prepaid annual access
 
-The owner SaaS uses Razorpay Subscriptions, not one-time Orders. Before deployment:
+The owner SaaS uses one-time Razorpay Orders. It does not create a recurring subscription or mandate. Before deployment:
 
-1. Create one yearly Razorpay Plan for each tier: Basic, Silver, Gold and Platinum. Use `period=yearly` and `interval=1`.
-2. Copy `.env.example` to the stage's secure deployment environment and set the four Plan IDs and matching amounts in paise.
-3. Store `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` in the deployment secret store. Never commit them or expose them to the frontend.
-4. Configure this webhook URL in Razorpay for all `subscription.*` events:
+1. Copy `.env.example` to the stage's secure deployment environment and set the four annual amounts in paise.
+2. Store `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` in the deployment secret store. Never commit secrets or expose the key secret to the frontend.
+3. Configure this webhook URL in Razorpay:
 
    `https://<api-id>.execute-api.ap-south-1.amazonaws.com/<stage>/subscriptions/webhook`
 
-5. At minimum enable `subscription.authenticated`, `subscription.activated`, `subscription.charged`, `subscription.updated`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.paused`, `subscription.resumed` and `subscription.completed`.
-6. Test the complete flow with Razorpay test keys and test Plan IDs before switching the production deployment to live credentials.
+4. Enable only `order.paid` and `payment.captured` for this integration.
+5. Test the complete flow with Razorpay test keys before switching production to live credentials.
 
-The amount configured in the environment is checked against the Razorpay Plan before checkout. A mismatch fails closed instead of displaying one amount and charging another.
+The backend creates an Order for the configured annual amount and verifies that Razorpay captured that full amount before granting access. Razorpay Plan IDs are not used.
 
 Current product decisions encoded by this implementation:
 
 - The 30-day trial is once per owner account and begins when management is explicitly activated or the first valid management write is made. A trial can add or activate only one managed property; migrated owners keep access to existing properties but cannot add more during the trial.
-- Owners may authorize an annual Razorpay plan during the trial. Its paid property limit and first annual charge begin only when the trial ends.
+- Owners may buy an annual plan during the trial. The full amount is charged immediately, while its access period and property limit begin after the trial ends.
+- Annual access is prepaid and never renews automatically. Owners can manually buy another year before the current paid period ends.
 - Pricing is annual-only: Basic ₹2,999, Silver ₹4,999, Gold ₹7,999 and Platinum ₹11,999 per year. Environment amounts are stored in paise.
 - Basic supports 1 managed property, Silver 2, Gold 5, and Platinum 10. Owners with 6–10 properties use Platinum; more than 10 requires an Enterprise arrangement.
 - Discovery-only properties use `managementEnabled: false`; their creation and listing edits are never paywalled.
-- Expired, cancelled, halted, paused and over-limit accounts retain all reads but management writes are blocked with HTTP 402.
+- Expired and over-limit accounts retain all reads, but management writes are blocked with HTTP 402.
 
 ### Grant the launch trial to existing owners
 

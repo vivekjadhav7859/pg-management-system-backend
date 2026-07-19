@@ -16,10 +16,6 @@ jobs:
       RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
       RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
       RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
-      RAZORPAY_PLAN_BASIC_ANNUAL: ${{ secrets.RAZORPAY_PLAN_BASIC_ANNUAL }}
-      RAZORPAY_PLAN_SILVER_ANNUAL: ${{ secrets.RAZORPAY_PLAN_SILVER_ANNUAL }}
-      RAZORPAY_PLAN_GOLD_ANNUAL: ${{ secrets.RAZORPAY_PLAN_GOLD_ANNUAL }}
-      RAZORPAY_PLAN_PLATINUM_ANNUAL: ${{ secrets.RAZORPAY_PLAN_PLATINUM_ANNUAL }}
 
     steps:
       - name: Checkout code
@@ -44,17 +40,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Validate subscription configuration
+      - name: Validate prepaid payment configuration
         shell: bash
         run: |
           required=(
             RAZORPAY_KEY_ID
             RAZORPAY_KEY_SECRET
             RAZORPAY_WEBHOOK_SECRET
-            RAZORPAY_PLAN_BASIC_ANNUAL
-            RAZORPAY_PLAN_SILVER_ANNUAL
-            RAZORPAY_PLAN_GOLD_ANNUAL
-            RAZORPAY_PLAN_PLATINUM_ANNUAL
           )
           missing=()
           for name in "${required[@]}"; do
@@ -64,7 +56,7 @@ jobs:
             echo "Missing PRODUCTION environment secrets: ${missing[*]}"
             exit 1
           fi
-          echo "Razorpay subscription configuration is present."
+          echo "Razorpay prepaid payment configuration is present."
 
       - name: Run tests (if available)
         run: |
