@@ -6,6 +6,7 @@ const tenantService = require('../../services/tenant.service');
 const financialService = require('../../services/financial.service');
 const { decryptSecret } = require('../../utils/crypto');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 /**
  * POST /financial/send-reminder
@@ -55,6 +56,9 @@ exports.handler = async (event) => {
             console.log('Failed: not owner of property', property.propertyId);
             return response.error('You can only send reminders to your tenants', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         // ===== BYO-SMTP: Fetch owner's email configuration =====
         const reminderSettings = await financialService.getReminderSettings(property.propertyId);

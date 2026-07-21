@@ -4,7 +4,7 @@
   "description": "PG Management System Backend with multi-environment support",
   "main": "handler.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
     "verify": "node scripts/verify-deployment.js",
     "verify:lambdas": "node scripts/verify-lambdas.js --stage dev",
     "fix:lambdas:dev": "node scripts/verify-lambdas.js --stage dev",
@@ -23,7 +23,8 @@
     "info:prod": "serverless info --stage prod",
     "prune:dev": "node scripts/prune-lambda-versions.js dev 3",
     "prune:qa": "node scripts/prune-lambda-versions.js qa 3",
-    "prune:prod": "node scripts/prune-lambda-versions.js prod 3"
+    "prune:prod": "node scripts/prune-lambda-versions.js prod 3",
+    "subscriptions:grant-existing-trials": "node scripts/grant-existing-owner-trials.js"
   },
   "keywords": [
     "serverless",

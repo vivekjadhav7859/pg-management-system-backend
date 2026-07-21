@@ -1,6 +1,7 @@
 const complaintsService = require('../../services/complaints.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -13,6 +14,9 @@ exports.handler = async (event) => {
         if (dbUser.userType !== 'owner' && dbUser.userType !== 'admin') {
             return response.error('Only owners/admins can update complaint status', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const { propertyId, complaintId } = event.pathParameters;
         const body = JSON.parse(event.body);
