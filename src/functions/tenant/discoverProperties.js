@@ -15,6 +15,8 @@ exports.handler = async (event) => {
         const search = (query.search || '').trim().toLowerCase();
         const minRent = query.minRent ? Number(query.minRent) : null;
         const maxRent = query.maxRent ? Number(query.maxRent) : null;
+        const propertyType = (query.propertyType || '').trim().toLowerCase();
+        const property_type = (query.property_type || '').trim().toLowerCase();
         const amenities = (query.amenities || '')
             .split(',')
             .map((item) => item.trim().toLowerCase())
@@ -46,6 +48,7 @@ exports.handler = async (event) => {
                 propertyName: property.propertyName,
                 address: property.address,
                 propertyType: property.propertyType,
+                property_type: property.property_type || null,
                 amenities: property.amenities || [],
                 rules: property.rules || [],
                 images: property.images || [],
@@ -84,6 +87,8 @@ exports.handler = async (event) => {
 
             if (city && !propertyCity.includes(city)) return false;
             if (search && !haystack.includes(search)) return false;
+            if (propertyType && (property.propertyType || '').toLowerCase() !== propertyType) return false;
+            if (property_type && (property.property_type || '').toLowerCase() !== property_type) return false;
             if (minRent !== null && property.highestRent && property.highestRent < minRent) return false;
             if (maxRent !== null && property.lowestRent && property.lowestRent > maxRent) return false;
             if (amenities.length && !amenities.every((item) => amenitySet.has(item))) return false;

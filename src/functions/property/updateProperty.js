@@ -49,6 +49,14 @@ exports.handler = async (event) => {
             updates.propertyType = body.propertyType;
         }
 
+        if (body.property_type !== undefined) {
+            const validTypesClass = ['girls', 'boys', 'co_live'];
+            if (!validTypesClass.includes(body.property_type)) {
+                return response.error('Invalid property classification type', 400);
+            }
+            updates.property_type = body.property_type;
+        }
+
         if (body.amenities !== undefined) {
             updates.amenities = body.amenities;
         }

@@ -22,9 +22,9 @@ exports.createProperty = async (propertyData) => {
                 city: propertyData.address.city,
                 state: propertyData.address.state,
                 pincode: propertyData.address.pincode,
-                country: propertyData.address.country || 'India'
             },
             propertyType: propertyData.propertyType, // PG, Hostel, Apartment
+            property_type: propertyData.property_type || 'co_live', // girls, boys, co_live
             totalRooms: propertyData.totalRooms || 0,
             totalBeds: propertyData.totalBeds || 0,
             occupiedBeds: 0,
@@ -141,6 +141,11 @@ exports.updateProperty = async (propertyId, updates) => {
         if (updates.propertyType !== undefined) {
             updateExpression += ', propertyType = :propertyType';
             expressionAttributeValues[':propertyType'] = updates.propertyType;
+        }
+
+        if (updates.property_type !== undefined) {
+            updateExpression += ', property_type = :property_type';
+            expressionAttributeValues[':property_type'] = updates.property_type;
         }
 
         if (updates.totalRooms !== undefined) {

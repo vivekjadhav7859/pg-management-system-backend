@@ -37,7 +37,8 @@ exports.handler = async (event) => {
             amenities,
             rules,
             images,
-            mapLink
+            mapLink,
+            property_type
         } = body;
 
         // Validate required fields
@@ -55,10 +56,17 @@ exports.handler = async (event) => {
             return response.error('Complete address is required (street, city, state, pincode)', 400);
         }
 
-        // Validate property type
         const validPropertyTypes = ['PG', 'Hostel', 'Apartment'];
         if (!validPropertyTypes.includes(propertyType)) {
             return response.error(`Invalid property type. Must be one of: ${validPropertyTypes.join(', ')}`, 400);
+        }
+
+        // Validate property_type (classification)
+        if (property_type !== undefined) {
+            const validPropertyTypesClass = ['girls', 'boys', 'co_live'];
+            if (!validPropertyTypesClass.includes(property_type)) {
+                return response.error(`Invalid property class type. Must be one of: ${validPropertyTypesClass.join(', ')}`, 400);
+            }
         }
 
         // Validate mapLink if provided
@@ -92,7 +100,8 @@ exports.handler = async (event) => {
             amenities: amenities || [],
             rules: rules || [],
             images: normalizeImageKeys(images || []),
-            mapLink: validatedMapLink
+            mapLink: validatedMapLink,
+            property_type: property_type
         });
 
         console.log('Property created successfully:', property.propertyId);
@@ -106,6 +115,7 @@ exports.handler = async (event) => {
                 propertyName: signedProperty.propertyName,
                 address: signedProperty.address,
                 propertyType: signedProperty.propertyType,
+                property_type: signedProperty.property_type,
                 totalRooms: signedProperty.totalRooms,
                 totalBeds: signedProperty.totalBeds,
                 occupiedBeds: signedProperty.occupiedBeds,
