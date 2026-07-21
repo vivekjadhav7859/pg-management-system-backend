@@ -2,7 +2,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
-const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { validateRequiredFields, sanitizeInput, validateUrl } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
 
 exports.handler = async (event) => {
@@ -36,7 +36,8 @@ exports.handler = async (event) => {
             totalBeds,
             amenities,
             rules,
-            images
+            images,
+            mapLink
         } = body;
 
         // Validate required fields
@@ -60,6 +61,16 @@ exports.handler = async (event) => {
             return response.error(`Invalid property type. Must be one of: ${validPropertyTypes.join(', ')}`, 400);
         }
 
+        // Validate mapLink if provided
+        let validatedMapLink = null;
+        if (mapLink && mapLink.trim() !== '') {
+            const mapLinkValidation = validateUrl(mapLink);
+            if (!mapLinkValidation.valid) {
+                return response.error(`Invalid map link: ${mapLinkValidation.message}`, 400);
+            }
+            validatedMapLink = mapLinkValidation.value;
+        }
+
         // Sanitize inputs
         const sanitizedPropertyName = sanitizeInput(propertyName);
         const sanitizedAddress = {
@@ -80,7 +91,8 @@ exports.handler = async (event) => {
             totalBeds: totalBeds || 0,
             amenities: amenities || [],
             rules: rules || [],
-            images: normalizeImageKeys(images || [])
+            images: normalizeImageKeys(images || []),
+            mapLink: validatedMapLink
         });
 
         console.log('Property created successfully:', property.propertyId);
@@ -102,6 +114,7 @@ exports.handler = async (event) => {
                 rules: signedProperty.rules,
                 images: signedProperty.images,
                 imageKeys: signedProperty.imageKeys,
+                mapLink: signedProperty.mapLink,
                 status: signedProperty.status,
                 createdAt: signedProperty.createdAt
             }

@@ -49,6 +49,7 @@ exports.handler = async (event) => {
                 amenities: property.amenities || [],
                 rules: property.rules || [],
                 images: property.images || [],
+                mapLink: property.mapLink || null,
                 totalRooms: rooms.length,
                 totalBeds: rooms.reduce((sum, room) => sum + Number(room.totalBeds || 0), 0),
                 availableBeds: availableRooms.reduce((sum, room) => sum + Number(room.availableBeds || 0), 0),

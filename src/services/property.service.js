@@ -32,6 +32,7 @@ exports.createProperty = async (propertyData) => {
             amenities: propertyData.amenities || [],
             rules: propertyData.rules || [],
             images: propertyData.images || [],
+            mapLink: propertyData.mapLink || null,
             status: 'active', // active, inactive, maintenance
             createdAt: timestamp,
             updatedAt: timestamp,
@@ -166,6 +167,11 @@ exports.updateProperty = async (propertyId, updates) => {
         if (updates.images !== undefined) {
             updateExpression += ', images = :images';
             expressionAttributeValues[':images'] = updates.images;
+        }
+
+        if (updates.mapLink !== undefined) {
+            updateExpression += ', mapLink = :mapLink';
+            expressionAttributeValues[':mapLink'] = updates.mapLink;
         }
 
         if (updates.status !== undefined) {

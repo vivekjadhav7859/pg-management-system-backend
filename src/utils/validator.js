@@ -183,3 +183,37 @@ exports.validateUserTypeAdmin = (userType) => {
         value: userType
     };
 };
+
+/**
+ * Validate and sanitize URL (specifically for map links)
+ * Ensures URL is HTTPS and valid
+ */
+exports.validateUrl = (url) => {
+    if (!url || typeof url !== 'string') {
+        return { valid: false, message: 'URL is required' };
+    }
+    
+    const trimmedUrl = url.trim();
+    if (trimmedUrl === '') {
+        return { valid: false, message: 'URL cannot be empty' };
+    }
+
+    try {
+        const parsedUrl = new URL(trimmedUrl);
+        if (parsedUrl.protocol !== 'https:') {
+            return { valid: false, message: 'Only HTTPS URLs are allowed' };
+        }
+        
+        // Additional check to prevent javascript: or data: URIs
+        if (trimmedUrl.toLowerCase().startsWith('javascript:') || trimmedUrl.toLowerCase().startsWith('data:')) {
+            return { valid: false, message: 'Invalid URL scheme' };
+        }
+
+        return {
+            valid: true,
+            value: parsedUrl.toString()
+        };
+    } catch (err) {
+        return { valid: false, message: 'Invalid URL format' };
+    }
+};
