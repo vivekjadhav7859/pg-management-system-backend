@@ -24,13 +24,42 @@ exports.handler = async (event) => {
 
         // Parse request body
         const body = JSON.parse(event.body);
-        const { name, phoneNumber, profileCompleted } = body;
+        const { name, phoneNumber, profileCompleted, userType } = body;
 
         // Get current user from database
-        const dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
+        let dbUser = await dynamoService.getUserByEmail(cognitoUser.email);
 
         if (!dbUser) {
-            return response.error('User not found in database', 404);
+            // User does not exist in DB (likely from Google Auth). Create them.
+            if (!userType) {
+                return response.error('userType is required to create a new profile', 400);
+            }
+
+            dbUser = await dynamoService.createUser({
+                cognitoUserId: cognitoUser.userId || cognitoUser.sub,
+                email: cognitoUser.email,
+                name: name ? sanitizeInput(name) : (cognitoUser.name || 'Unknown'),
+                phoneNumber: phoneNumber ? sanitizeInput(phoneNumber) : null,
+                userType: sanitizeInput(userType),
+                emailVerified: true
+            });
+            
+            return response.success({
+                message: 'Profile created successfully',
+                user: {
+                    userId: dbUser.userId,
+                    email: dbUser.email,
+                    name: dbUser.name,
+                    phoneNumber: dbUser.phoneNumber,
+                    userType: dbUser.userType,
+                    status: dbUser.status,
+                    emailVerified: dbUser.emailVerified,
+                    profileCompleted: true,
+                    lastLoginAt: dbUser.lastLoginAt,
+                    createdAt: dbUser.createdAt,
+                    updatedAt: dbUser.updatedAt
+                }
+            });
         }
 
         // Check if user is active

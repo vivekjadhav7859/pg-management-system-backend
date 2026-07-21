@@ -64,6 +64,8 @@ provider:
             - cognito-idp:GetUser
             - cognito-idp:GlobalSignOut
             - cognito-idp:AdminRespondToAuthChallenge
+            - cognito-idp:AdminLinkProviderForUser
+            - cognito-idp:ListUsers
           Resource: "*"
         
         # DynamoDB permissions
@@ -145,8 +147,17 @@ build:
     platform: node
     exclude:
       - aws-sdk
+      - "@aws-sdk/client-cognito-identity-provider"
 
 functions:
+  cognitoPreSignUp:
+    handler: src/functions/auth/preSignUp.handler
+    events:
+      - cognitoUserPool:
+          pool: pg-mgmt-user-pool-${self:provider.stage}
+          trigger: PreSignUp
+          existing: true
+
   cognitoCustomMessage:
     handler: src/functions/auth/customMessage.handler
     events:
@@ -1055,6 +1066,9 @@ resources:
           - Name: phone_number
             AttributeDataType: String
             Mutable: true
+          - Name: picture
+            AttributeDataType: String
+            Mutable: true
         Policies:
           PasswordPolicy:
             MinimumLength: 8
@@ -1065,6 +1079,7 @@ resources:
 
     CognitoUserPoolClient:
       Type: AWS::Cognito::UserPoolClient
+      DependsOn: CognitoUserPoolIdentityProviderGoogle
       DeletionPolicy: Retain
       Properties:
         ClientName: pg-mgmt-client-${self:provider.stage}
@@ -1077,6 +1092,43 @@ resources:
           - ADMIN_NO_SRP_AUTH
           - USER_PASSWORD_AUTH
         PreventUserExistenceErrors: ENABLED
+        SupportedIdentityProviders:
+          - COGNITO
+          - Google
+        AllowedOAuthFlows:
+          - code
+        AllowedOAuthScopes:
+          - email
+          - openid
+          - profile
+        AllowedOAuthFlowsUserPoolClient: true
+        CallbackURLs:
+          - http://localhost:5173/auth/callback
+          - https://gobanqo.com/auth/callback
+        LogoutURLs:
+          - http://localhost:5173/login
+          - https://gobanqo.com/login
+
+    CognitoUserPoolDomain:
+      Type: AWS::Cognito::UserPoolDomain
+      Properties:
+        Domain: pg-mgmt-auth-${self:provider.stage}-${self:provider.region}
+        UserPoolId: !Ref CognitoUserPool
+
+    CognitoUserPoolIdentityProviderGoogle:
+      Type: AWS::Cognito::UserPoolIdentityProvider
+      Properties:
+        ProviderName: Google
+        ProviderType: Google
+        UserPoolId: !Ref CognitoUserPool
+        ProviderDetails:
+          client_id: "1057172668359-o9o1l6moa659flrhdjhr7nsnitfq1gvb.apps.googleusercontent.com"
+          client_secret: "${env:GOOGLE_CLIENT_SECRET, ''}"
+          authorize_scopes: "email profile openid"
+        AttributeMapping:
+          email: "email"
+          name: "name"
+          picture: "picture"
 
     # ============ DYNAMODB TABLES ============
     
