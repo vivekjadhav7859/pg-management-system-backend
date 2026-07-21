@@ -32,6 +32,7 @@ exports.createProperty = async (propertyData) => {
             amenities: propertyData.amenities || [],
             rules: propertyData.rules || [],
             images: propertyData.images || [],
+            property_type: propertyData.property_type,
             status: 'active', // active, inactive, maintenance
             createdAt: timestamp,
             updatedAt: timestamp,
@@ -173,6 +174,11 @@ exports.updateProperty = async (propertyId, updates) => {
             expressionAttributeValues[':status'] = updates.status;
             expressionAttributeValues[':statusIndex'] = updates.status;
             expressionAttributeNames['#status'] = 'status';
+        }
+
+        if (updates.property_type !== undefined) {
+            updateExpression += ', property_type = :property_type';
+            expressionAttributeValues[':property_type'] = updates.property_type;
         }
 
         const params = {

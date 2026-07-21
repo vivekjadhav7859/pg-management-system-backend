@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
+const { PROPERTY_TYPES, PROPERTY_CATEGORIES } = require('../../utils/constants');
 
 exports.handler = async (event) => {
     try {
@@ -36,14 +37,16 @@ exports.handler = async (event) => {
             totalBeds,
             amenities,
             rules,
-            images
+            images,
+            property_type
         } = body;
 
         // Validate required fields
         const requiredValidation = validateRequiredFields(body, [
             'propertyName', 
             'address',
-            'propertyType'
+            'propertyType',
+            'property_type'
         ]);
         if (!requiredValidation.valid) {
             return response.error(requiredValidation.message, 400);
@@ -55,9 +58,16 @@ exports.handler = async (event) => {
         }
 
         // Validate property type
-        const validPropertyTypes = ['PG', 'Hostel', 'Apartment'];
-        if (!validPropertyTypes.includes(propertyType)) {
-            return response.error(`Invalid property type. Must be one of: ${validPropertyTypes.join(', ')}`, 400);
+        // Validate property type (category)
+        const validCategories = Object.values(PROPERTY_CATEGORIES);
+        if (!validCategories.includes(propertyType)) {
+            return response.error(`Invalid property type (category). Must be one of: ${validCategories.join(', ')}`, 400);
+        }
+
+        // Validate new property_type
+        const validTypes = Object.values(PROPERTY_TYPES);
+        if (!validTypes.includes(property_type)) {
+            return response.error(`Invalid property_type. Must be one of: ${validTypes.join(', ')}`, 400);
         }
 
         // Sanitize inputs
@@ -80,7 +90,8 @@ exports.handler = async (event) => {
             totalBeds: totalBeds || 0,
             amenities: amenities || [],
             rules: rules || [],
-            images: normalizeImageKeys(images || [])
+            images: normalizeImageKeys(images || []),
+            property_type: property_type
         });
 
         console.log('Property created successfully:', property.propertyId);
@@ -103,7 +114,8 @@ exports.handler = async (event) => {
                 images: signedProperty.images,
                 imageKeys: signedProperty.imageKeys,
                 status: signedProperty.status,
-                createdAt: signedProperty.createdAt
+                createdAt: signedProperty.createdAt,
+                property_type: signedProperty.property_type
             }
         }, 201);
 
