@@ -2,8 +2,9 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
-const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { validateRequiredFields, sanitizeInput, validateUrl } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
+const { PROPERTY_TYPES, PROPERTY_CATEGORIES } = require('../../utils/constants');
 const subscriptionService = require('../../services/subscription.service');
 
 exports.handler = async (event) => {
@@ -38,6 +39,8 @@ exports.handler = async (event) => {
             amenities,
             rules,
             images,
+            mapLink,
+            property_type,
             managementEnabled = true
         } = body;
 
@@ -45,7 +48,8 @@ exports.handler = async (event) => {
         const requiredValidation = validateRequiredFields(body, [
             'propertyName', 
             'address',
-            'propertyType'
+            'propertyType',
+            'property_type'
         ]);
         if (!requiredValidation.valid) {
             return response.error(requiredValidation.message, 400);
@@ -56,10 +60,26 @@ exports.handler = async (event) => {
             return response.error('Complete address is required (street, city, state, pincode)', 400);
         }
 
-        // Validate property type
-        const validPropertyTypes = ['PG', 'Hostel', 'Apartment'];
-        if (!validPropertyTypes.includes(propertyType)) {
-            return response.error(`Invalid property type. Must be one of: ${validPropertyTypes.join(', ')}`, 400);
+        // Validate property type (category)
+        const validCategories = Object.values(PROPERTY_CATEGORIES);
+        if (!validCategories.includes(propertyType)) {
+            return response.error(`Invalid property type (category). Must be one of: ${validCategories.join(', ')}`, 400);
+        }
+
+        // Validate new property_type
+        const validTypes = Object.values(PROPERTY_TYPES);
+        if (!validTypes.includes(property_type)) {
+            return response.error(`Invalid property_type. Must be one of: ${validTypes.join(', ')}`, 400);
+        }
+
+        // Validate mapLink if provided
+        let validatedMapLink = null;
+        if (mapLink && mapLink.trim() !== '') {
+            const mapLinkValidation = validateUrl(mapLink);
+            if (!mapLinkValidation.valid) {
+                return response.error(`Invalid map link: ${mapLinkValidation.message}`, 400);
+            }
+            validatedMapLink = mapLinkValidation.value;
         }
 
         // A discovery-only listing is always free. A valid management activation
@@ -74,7 +94,6 @@ exports.handler = async (event) => {
                 throw error;
             }
         }
-
         // Sanitize inputs
         const sanitizedPropertyName = sanitizeInput(propertyName);
         const sanitizedAddress = {
@@ -96,6 +115,8 @@ exports.handler = async (event) => {
             amenities: amenities || [],
             rules: rules || [],
             images: normalizeImageKeys(images || []),
+            mapLink: validatedMapLink,
+            property_type: property_type,
             managementEnabled: managementEnabled !== false
         });
 
@@ -110,6 +131,7 @@ exports.handler = async (event) => {
                 propertyName: signedProperty.propertyName,
                 address: signedProperty.address,
                 propertyType: signedProperty.propertyType,
+                property_type: signedProperty.property_type,
                 totalRooms: signedProperty.totalRooms,
                 totalBeds: signedProperty.totalBeds,
                 occupiedBeds: signedProperty.occupiedBeds,
@@ -118,9 +140,11 @@ exports.handler = async (event) => {
                 rules: signedProperty.rules,
                 images: signedProperty.images,
                 imageKeys: signedProperty.imageKeys,
+                mapLink: signedProperty.mapLink,
                 status: signedProperty.status,
                 managementEnabled: signedProperty.managementEnabled,
-                createdAt: signedProperty.createdAt
+                createdAt: signedProperty.createdAt,
+                property_type: signedProperty.property_type
             }
         }, 201);
 

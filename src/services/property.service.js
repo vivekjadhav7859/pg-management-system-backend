@@ -22,9 +22,9 @@ exports.createProperty = async (propertyData) => {
                 city: propertyData.address.city,
                 state: propertyData.address.state,
                 pincode: propertyData.address.pincode,
-                country: propertyData.address.country || 'India'
             },
             propertyType: propertyData.propertyType, // PG, Hostel, Apartment
+            property_type: propertyData.property_type || 'co_live', // girls, boys, co_live
             totalRooms: propertyData.totalRooms || 0,
             totalBeds: propertyData.totalBeds || 0,
             occupiedBeds: 0,
@@ -32,6 +32,7 @@ exports.createProperty = async (propertyData) => {
             amenities: propertyData.amenities || [],
             rules: propertyData.rules || [],
             images: propertyData.images || [],
+            mapLink: propertyData.mapLink || null,
             // Discovery-only listings remain free. Existing records without this
             // field are treated as managed properties for backwards compatibility.
             managementEnabled: propertyData.managementEnabled !== false,
@@ -145,6 +146,11 @@ exports.updateProperty = async (propertyId, updates) => {
             expressionAttributeValues[':propertyType'] = updates.propertyType;
         }
 
+        if (updates.property_type !== undefined) {
+            updateExpression += ', property_type = :property_type';
+            expressionAttributeValues[':property_type'] = updates.property_type;
+        }
+
         if (updates.totalRooms !== undefined) {
             updateExpression += ', totalRooms = :totalRooms';
             expressionAttributeValues[':totalRooms'] = updates.totalRooms;
@@ -171,6 +177,11 @@ exports.updateProperty = async (propertyId, updates) => {
             expressionAttributeValues[':images'] = updates.images;
         }
 
+        if (updates.mapLink !== undefined) {
+            updateExpression += ', mapLink = :mapLink';
+            expressionAttributeValues[':mapLink'] = updates.mapLink;
+        }
+
         if (updates.managementEnabled !== undefined) {
             updateExpression += ', managementEnabled = :managementEnabled';
             expressionAttributeValues[':managementEnabled'] = updates.managementEnabled;
@@ -181,6 +192,11 @@ exports.updateProperty = async (propertyId, updates) => {
             expressionAttributeValues[':status'] = updates.status;
             expressionAttributeValues[':statusIndex'] = updates.status;
             expressionAttributeNames['#status'] = 'status';
+        }
+
+        if (updates.property_type !== undefined) {
+            updateExpression += ', property_type = :property_type';
+            expressionAttributeValues[':property_type'] = updates.property_type;
         }
 
         const params = {
@@ -397,6 +413,21 @@ exports.updateRoom = async (roomId, updates) => {
             expressionAttributeValues[':floor'] = updates.floor;
         }
 
+        if (updates.totalBeds !== undefined) {
+            updateExpression += ', totalBeds = :totalBeds';
+            expressionAttributeValues[':totalBeds'] = updates.totalBeds;
+        }
+
+        if (updates.occupiedBeds !== undefined) {
+            updateExpression += ', occupiedBeds = :occupiedBeds';
+            expressionAttributeValues[':occupiedBeds'] = updates.occupiedBeds;
+        }
+
+        if (updates.availableBeds !== undefined) {
+            updateExpression += ', availableBeds = :availableBeds';
+            expressionAttributeValues[':availableBeds'] = updates.availableBeds;
+        }
+
         if (updates.rentPerBed !== undefined) {
             updateExpression += ', rentPerBed = :rentPerBed';
             expressionAttributeValues[':rentPerBed'] = updates.rentPerBed;
@@ -481,6 +512,48 @@ exports.deleteRoom = async (roomId) => {
 };
 
 /**
+ * Recalculate room occupancy and status based on active bed assignments
+ */
+exports.recalculateRoomOccupancy = async (roomId) => {
+    try {
+        const room = await exports.getRoomById(roomId);
+        if (!room) return null;
+
+        const tenantService = require('./tenant.service');
+        const activeAssignments = await tenantService.getBedAssignmentsByRoom(roomId);
+        const occupiedCount = activeAssignments.length;
+        const totalBeds = Number(room.totalBeds) || 1;
+        const availableBeds = Math.max(0, totalBeds - occupiedCount);
+
+        let newStatus = room.status;
+        if (room.status !== 'maintenance') {
+            newStatus = availableBeds === 0 ? 'occupied' : 'available';
+        }
+
+        const timestamp = new Date().toISOString();
+        const params = {
+            TableName: ROOM_TABLE,
+            Key: { roomId },
+            UpdateExpression: 'SET occupiedBeds = :occ, availableBeds = :avail, #status = :status, statusIndex = :status, updatedAt = :ts',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: {
+                ':occ': occupiedCount,
+                ':avail': availableBeds,
+                ':status': newStatus,
+                ':ts': timestamp
+            },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        const result = await dynamodb.update(params).promise();
+        return result.Attributes;
+    } catch (error) {
+        console.error('Error recalculating room occupancy:', error);
+        throw error;
+    }
+};
+
+/**
  * Update room occupancy (called when bed is assigned/released)
  */
 exports.updateRoomOccupancy = async (roomId, bedsChange) => {
@@ -503,10 +576,13 @@ exports.updateRoomOccupancy = async (roomId, bedsChange) => {
         const result = await dynamodb.update(params).promise();
         
         // Update room status based on occupancy
-        if (result.Attributes.availableBeds === 0) {
-            await exports.updateRoom(roomId, { status: 'occupied' });
-        } else if (result.Attributes.availableBeds > 0 && result.Attributes.status === 'occupied') {
-            await exports.updateRoom(roomId, { status: 'available' });
+        const roomAttr = result.Attributes;
+        if (roomAttr && roomAttr.status !== 'maintenance') {
+            if (roomAttr.availableBeds <= 0 && roomAttr.status !== 'occupied') {
+                await exports.updateRoom(roomId, { status: 'occupied' });
+            } else if (roomAttr.availableBeds > 0 && roomAttr.status === 'occupied') {
+                await exports.updateRoom(roomId, { status: 'available' });
+            }
         }
 
         return result.Attributes;
@@ -515,4 +591,147 @@ exports.updateRoomOccupancy = async (roomId, bedsChange) => {
         console.error('Error updating room occupancy:', error);
         throw error;
     }
+};
+
+// ==================== BULK ROOM OPERATIONS ====================
+
+/**
+ * Fetch all room numbers that already exist for a given property.
+ * Used for conflict detection before bulk insert.
+ *
+ * @param {string} propertyId
+ * @returns {Promise<Set<string>>} Set of existing roomNumber strings
+ */
+exports.getExistingRoomNumbers = async (propertyId) => {
+    try {
+        const existingNumbers = new Set();
+        let lastEvaluatedKey = null;
+
+        // Paginate through ALL rooms for this property (no Limit cap)
+        do {
+            const params = {
+                TableName: ROOM_TABLE,
+                IndexName: 'PropertyIdIndex',
+                KeyConditionExpression: 'propertyIdIndex = :propertyId',
+                FilterExpression: '#status <> :deleted',
+                ExpressionAttributeNames: { '#status': 'status' },
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId,
+                    ':deleted': 'deleted'
+                },
+                ProjectionExpression: 'roomNumber'
+            };
+
+            if (lastEvaluatedKey) {
+                params.ExclusiveStartKey = lastEvaluatedKey;
+            }
+
+            const result = await dynamodb.query(params).promise();
+
+            (result.Items || []).forEach(item => {
+                if (item.roomNumber) existingNumbers.add(item.roomNumber);
+            });
+
+            lastEvaluatedKey = result.LastEvaluatedKey || null;
+
+        } while (lastEvaluatedKey);
+
+        return existingNumbers;
+
+    } catch (error) {
+        console.error('Error fetching existing room numbers:', error);
+        throw error;
+    }
+};
+
+/**
+ * Bulk-create rooms using DynamoDB TransactWriteItems.
+ *
+ * Chunks the rooms array into groups of 90 (DynamoDB hard-limits TransactWriteItems at 100;
+ * we use 90 to leave headroom). Each chunk is atomic (all-or-nothing within the chunk).
+ *
+ * After all chunks succeed, updates property counters atomically with the exact count
+ * of rooms and beds that were inserted.
+ *
+ * @param {Array<{roomNumber,roomType,floor,totalBeds,rentPerBed,securityDeposit,amenities}>} rooms
+ * @param {string} propertyId
+ * @returns {Promise<{created: Array, failed: Array}>}
+ */
+exports.bulkCreateRooms = async (rooms, propertyId) => {
+    const CHUNK_SIZE = 90;
+    const timestamp = new Date().toISOString();
+
+    const createdRooms = [];
+    const failedRooms = [];
+
+    // Build all room items first (assign IDs and timestamps)
+    const roomItems = rooms.map(room => ({
+        roomId: uuidv4(),
+        propertyId: propertyId,
+        roomNumber: room.roomNumber,
+        roomType: room.roomType,
+        floor: room.floor,
+        totalBeds: room.totalBeds,
+        occupiedBeds: 0,
+        availableBeds: room.totalBeds,
+        rentPerBed: room.rentPerBed,
+        securityDeposit: room.securityDeposit || 0,
+        amenities: room.amenities || [],
+        images: [],
+        status: 'available',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        // GSI attributes
+        propertyIdIndex: propertyId,
+        statusIndex: 'available'
+    }));
+
+    // Chunk into groups of CHUNK_SIZE
+    for (let i = 0; i < roomItems.length; i += CHUNK_SIZE) {
+        const chunk = roomItems.slice(i, i + CHUNK_SIZE);
+
+        const transactItems = chunk.map(item => ({
+            Put: {
+                TableName: ROOM_TABLE,
+                Item: item
+            }
+        }));
+
+        try {
+            await dynamodb.transactWrite({ TransactItems: transactItems }).promise();
+            createdRooms.push(...chunk);
+        } catch (error) {
+            console.error(`Bulk room insert chunk ${Math.floor(i / CHUNK_SIZE) + 1} failed:`, error);
+            // Record all rooms in this chunk as failed
+            failedRooms.push(...chunk.map(r => ({
+                roomNumber: r.roomNumber,
+                reason: 'Transaction failed'
+            })));
+        }
+    }
+
+    // Atomically update property counters for successfully created rooms
+    if (createdRooms.length > 0) {
+        const totalNewBeds = createdRooms.reduce((acc, r) => acc + r.totalBeds, 0);
+        const timestamp2 = new Date().toISOString();
+
+        try {
+            await dynamodb.update({
+                TableName: PROPERTY_TABLE,
+                Key: { propertyId: propertyId },
+                UpdateExpression: 'ADD totalRooms :roomCount, totalBeds :bedCount, availableBeds :bedCount SET updatedAt = :ts',
+                ExpressionAttributeValues: {
+                    ':roomCount': createdRooms.length,
+                    ':bedCount': totalNewBeds,
+                    ':ts': timestamp2
+                },
+                ReturnValues: 'ALL_NEW'
+            }).promise();
+        } catch (error) {
+            console.error('Failed to update property counters after bulk room insert:', error);
+            // Non-fatal — rooms were created; counters can be recalculated
+        }
+    }
+
+    return { created: createdRooms, failed: failedRooms };
 };

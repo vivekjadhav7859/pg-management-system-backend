@@ -1,9 +1,15 @@
 
-const dynamoService = require('../../services/dynamodb.service');
+const AWS = require('aws-sdk');
 const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
 const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
+
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+
+function bedAssignmentId(roomId, bedNumber) {
+    return `reservation#${roomId}#${String(bedNumber).trim()}`;
+}
 
 exports.handler = async (event) => {
     try {
@@ -26,6 +32,9 @@ exports.handler = async (event) => {
 
         // Verify property ownership
         const property = await propertyService.getPropertyById(tenant.propertyId);
+        if (!property) {
+            return response.error('Property not found', 404);
+        }
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only check-out tenants from your properties', 403);
         }
@@ -37,12 +46,85 @@ exports.handler = async (event) => {
             return response.error('Tenant is already checked-out', 400);
         }
 
-        const body = JSON.parse(event.body);
+        const body = JSON.parse(event.body || '{}');
         const checkOutDate = body.checkOutDate || new Date().toISOString();
+        const timestamp = new Date().toISOString();
 
-        // Check-out tenant
-        await tenantService.checkOutTenant(tenantId, checkOutDate);
+        const assignmentId = bedAssignmentId(tenant.roomId, tenant.bedNumber);
 
+        // ── Execute Atomic TransactWriteItems ──
+        const transactItems = [
+            // 1. Update Tenant Status
+            {
+                Update: {
+                    TableName: process.env.TENANT_TABLE,
+                    Key: { tenantId },
+                    UpdateExpression: 'SET #status = :checked_out, statusIndex = :checked_out, tenancyStatus = :completed, checkOutDate = :checkOutDate, updatedAt = :ts',
+                    ExpressionAttributeNames: { '#status': 'status' },
+                    ExpressionAttributeValues: {
+                        ':checked_out': 'checked_out',
+                        ':completed': 'completed',
+                        ':checkOutDate': checkOutDate,
+                        ':ts': timestamp,
+                        ':active': 'active',
+                        ':inProgress': 'in_progress'
+                    },
+                    ConditionExpression: 'attribute_exists(tenantId) AND #status IN (:active, :inProgress)'
+                }
+            },
+            // 2. Release Bed Assignment
+            {
+                Update: {
+                    TableName: process.env.BED_ASSIGNMENT_TABLE,
+                    Key: { assignmentId },
+                    UpdateExpression: 'SET #status = :released, releasedDate = :ts, updatedAt = :ts',
+                    ExpressionAttributeNames: { '#status': 'status' },
+                    ExpressionAttributeValues: {
+                        ':released': 'released',
+                        ':ts': timestamp
+                    }
+                }
+            },
+            // 3. Decrement Room Occupancy
+            {
+                Update: {
+                    TableName: process.env.ROOM_TABLE,
+                    Key: { roomId: tenant.roomId },
+                    UpdateExpression: 'SET occupiedBeds = occupiedBeds - :one, availableBeds = availableBeds + :one, updatedAt = :ts',
+                    ExpressionAttributeValues: {
+                        ':one': 1,
+                        ':ts': timestamp,
+                        ':zero': 0
+                    },
+                    ConditionExpression: 'occupiedBeds > :zero'
+                }
+            },
+            // 4. Decrement Property Occupancy
+            {
+                Update: {
+                    TableName: process.env.PROPERTY_TABLE,
+                    Key: { propertyId: tenant.propertyId },
+                    UpdateExpression: 'SET occupiedBeds = occupiedBeds - :one, availableBeds = availableBeds + :one, updatedAt = :ts',
+                    ExpressionAttributeValues: {
+                        ':one': 1,
+                        ':ts': timestamp
+                    }
+                }
+            }
+        ];
+
+        try {
+            await dynamodb.transactWrite({ TransactItems: transactItems }).promise();
+        } catch (txErr) {
+            console.warn('Atomic checkout transaction failed, falling back to sequential releases:', txErr.message);
+            // Fallback: execute updates if record structures differed
+            await tenantService.checkOutTenant(tenantId, checkOutDate);
+            await tenantService.releaseBedByTenant(tenantId);
+            await propertyService.updateRoomOccupancy(tenant.roomId, -1);
+            await propertyService.updatePropertyOccupancy(tenant.propertyId, -1);
+        }
+
+        // ── Post-Transaction Actions (Settlements & Room Status Sync) ──
         const settlementUpdates = {};
         if (body.roomInspectionStatus !== undefined) settlementUpdates.roomInspectionStatus = body.roomInspectionStatus;
         if (body.finalSettlementStatus !== undefined) settlementUpdates.finalSettlementStatus = body.finalSettlementStatus;
@@ -58,16 +140,14 @@ exports.handler = async (event) => {
             await tenantService.updateTenant(tenantId, settlementUpdates);
         }
 
-        // Release bed (find assignment by tenant)
-        // Note: You might want to add a method to get assignment by tenantId
-        
-        // Update room occupancy
-        await propertyService.updateRoomOccupancy(tenant.roomId, -1);
+        // Recalculate and synchronize room status & occupancy count
+        try {
+            await propertyService.recalculateRoomOccupancy(tenant.roomId);
+        } catch (syncErr) {
+            console.warn('Non-critical: room status sync after checkout encountered warning:', syncErr.message);
+        }
 
-        // Update property occupancy
-        await propertyService.updatePropertyOccupancy(tenant.propertyId, -1);
-
-        console.log('Tenant checked-out successfully:', tenantId);
+        console.log('Tenant checked-out successfully (atomic):', tenantId);
 
         return response.success({
             message: 'Tenant checked-out successfully',
