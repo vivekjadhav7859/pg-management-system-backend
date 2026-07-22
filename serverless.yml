@@ -615,6 +615,20 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  migrateTenant:
+    handler: src/functions/tenant/migrateTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/migrate
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   uploadKYC:
     handler: src/functions/tenant/uploadKYC.handler
     events:
