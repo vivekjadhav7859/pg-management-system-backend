@@ -998,6 +998,27 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  getNotificationLogs:
+    handler: src/functions/notifications/getNotificationLogs.handler
+    events:
+      - http:
+          path: notifications/logs
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  sesEventHandler:
+    handler: src/functions/notifications/sesEventHandler.handler
+    events:
+      - http:
+          path: notifications/ses-events
+          method: post
+          cors: *corsConfig
+
   # ============ COMPLAINTS MANAGEMENT ============
   createComplaint:
     handler: src/functions/complaints/createComplaint.handler

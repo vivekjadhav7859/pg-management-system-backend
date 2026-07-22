@@ -1,8 +1,8 @@
 const AWS = require('aws-sdk');
-const financialService = require('../../services/financial.service');
 const propertyService = require('../../services/property.service');
-const { buildTransporter, logEmail, delay, getRentReminderTemplate } = require('../../utils/emailHelper');
+const notificationService = require('../../services/notification.service');
 const subscriptionService = require('../../services/subscription.service');
+const financialService = require('../../services/financial.service');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -11,7 +11,7 @@ const USER_TABLE = process.env.USER_TABLE;
 
 /**
  * Scheduled: 1st of every month at 9:00 AM IST (cron(30 3 1 * ? *))
- * Sends rent reminder emails to all active tenants across all owners.
+ * Sends rent reminder emails to all active tenants across all owners using AWS SES platform.
  */
 exports.handler = async (event) => {
     console.log('[scheduledRentReminder] triggered', JSON.stringify(event));
@@ -71,59 +71,51 @@ exports.handler = async (event) => {
             throw error;
         }
 
+        // Check if property has automated reminders enabled
+        const reminderSettings = await financialService.getReminderSettings(propertyId).catch(() => null);
+        if (reminderSettings && reminderSettings.autoEnabled === false) {
+            console.log(`[scheduledRentReminder] auto reminders disabled for property ${propertyId}, skipping ${propertyTenants.length} tenants`);
+            continue;
+        }
+
         // Fetch owner details
         let ownerName = property.propertyName;
+        let ownerEmail = null;
         try {
             const ownerResult = await dynamodb.get({ TableName: USER_TABLE, Key: { userId: property.ownerId } }).promise();
-            if (ownerResult.Item) ownerName = ownerResult.Item.name || ownerName;
-        } catch (_) {}
-
-        // Fetch SMTP config for this property
-        const reminderSettings = await financialService.getReminderSettings(propertyId).catch(() => null);
-        if (!reminderSettings || !reminderSettings.emailConfig) {
-            console.log(`[scheduledRentReminder] no SMTP config for property ${propertyId}, skipping ${propertyTenants.length} tenants`);
-            for (const t of propertyTenants) {
-                if (!t.email) continue;
-                await logEmail({ ownerId: property.ownerId, tenantId: t.tenantId, tenantEmail: t.email, type: 'RENT_REMINDER', subject: 'Rent Reminder', status: 'FAILED', errorMessage: 'SMTP not configured for property' });
-                failed++;
+            if (ownerResult.Item) {
+                ownerName = ownerResult.Item.name || ownerName;
+                ownerEmail = ownerResult.Item.email || null;
             }
-            continue;
-        }
-
-        let transporter;
-        try {
-            transporter = await buildTransporter(reminderSettings.emailConfig);
-        } catch (err) {
-            console.error(`[scheduledRentReminder] transporter build failed ${propertyId}`, err.message);
-            failed += propertyTenants.length;
-            continue;
-        }
+        } catch (_) {}
 
         for (const tenant of propertyTenants) {
             if (!tenant.email) { failed++; continue; }
-            const { subject, html } = getRentReminderTemplate({
-                tenantName: tenant.name || 'Tenant',
-                ownerName,
-                propertyName: property.propertyName,
-                rentAmount: tenant.rentAmount || 0,
-                dueDate: dueDateDisplay,
+
+            const result = await notificationService.sendNotification({
+                type: 'RENT_REMINDER',
+                ownerId: property.ownerId,
+                tenantId: tenant.tenantId,
+                tenantEmail: tenant.email,
+                replyTo: ownerEmail || undefined,
+                propertyId,
+                data: {
+                    tenantName: tenant.name || 'Tenant',
+                    ownerName,
+                    propertyName: property.propertyName,
+                    roomNumber: tenant.roomId || '',
+                    rentAmount: tenant.rentAmount || 0,
+                    dueDate: dueDateDisplay
+                }
             });
-            try {
-                await transporter.sendMail({
-                    from: `"${property.propertyName}" <${reminderSettings.emailConfig.user}>`,
-                    to: tenant.email,
-                    subject,
-                    html,
-                });
-                await logEmail({ ownerId: property.ownerId, tenantId: tenant.tenantId, tenantEmail: tenant.email, type: 'RENT_REMINDER', subject, status: 'SENT' });
+
+            if (result.sent) {
                 sent++;
                 console.log(`[scheduledRentReminder] sent to ${tenant.email}`);
-            } catch (err) {
-                console.error(`[scheduledRentReminder] send failed ${tenant.email}`, err.message);
-                await logEmail({ ownerId: property.ownerId, tenantId: tenant.tenantId, tenantEmail: tenant.email, type: 'RENT_REMINDER', subject, status: 'FAILED', errorMessage: err.message });
+            } else {
                 failed++;
+                console.error(`[scheduledRentReminder] failed ${tenant.email}: ${result.reason}`);
             }
-            await delay(1500);
         }
     }
 

@@ -67,6 +67,8 @@ const FUNCTIONS = [
   { name: 'sendReminder',         src: 'src/functions/financial/sendReminder.js' },
   { name: 'getReminderSettings',  src: 'src/functions/financial/getReminderSettings.js' },
   { name: 'updateReminderSettings', src: 'src/functions/financial/updateReminderSettings.js' },
+  { name: 'getNotificationLogs',  src: 'src/functions/notifications/getNotificationLogs.js' },
+  { name: 'sesEventHandler',      src: 'src/functions/notifications/sesEventHandler.js' },
 ];
 
 const MIN_HEALTHY_BYTES = 50_000; // 50 KB — broken zips are ~895 bytes
