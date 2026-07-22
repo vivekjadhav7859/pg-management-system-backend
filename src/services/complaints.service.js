@@ -48,7 +48,21 @@ exports.getComplaintsByProperty = async (propertyId) => {
         };
 
         const result = await dynamodb.query(params).promise();
-        return result.Items || [];
+        let complaints = result.Items || [];
+
+        if (complaints.length === 0) {
+            const scanParams = {
+                TableName: COMPLAINTS_TABLE,
+                FilterExpression: 'propertyId = :propertyId OR propertyIdIndex = :propertyId',
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId
+                }
+            };
+            const scanResult = await dynamodb.scan(scanParams).promise();
+            complaints = scanResult.Items || [];
+        }
+
+        return complaints;
     } catch (error) {
         console.error('Error getting complaints by property:', error);
         throw error;

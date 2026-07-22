@@ -11,11 +11,18 @@ async function withKycViewUrls(tenant) {
     const documents = tenant.kycDocuments || {};
     const entries = await Promise.all(Object.entries(documents).map(async ([type, doc]) => {
         if (!doc?.key) return [type, doc];
-        const viewUrl = await s3.getSignedUrlPromise('getObject', {
-            Bucket: process.env.S3_BUCKET,
-            Key: doc.key,
-            Expires: 900,
-        });
+        let viewUrl = null;
+        try {
+            if (process.env.S3_BUCKET) {
+                viewUrl = await s3.getSignedUrlPromise('getObject', {
+                    Bucket: process.env.S3_BUCKET,
+                    Key: doc.key,
+                    Expires: 900,
+                });
+            }
+        } catch (err) {
+            console.warn(`[getTenants] S3 signed URL error for key ${doc.key}:`, err.message);
+        }
         return [type, { ...doc, viewUrl }];
     }));
     return { ...tenant, kycDocuments: Object.fromEntries(entries) };
@@ -51,8 +58,18 @@ exports.handler = async (event) => {
         }
 
         const result = await tenantService.getTenantsByProperty(propertyId);
+        const roomsResult = await propertyService.getRoomsByProperty(propertyId).catch(() => ({ rooms: [] }));
+        const roomMap = new Map((roomsResult.rooms || []).map(r => [r.roomId, r.roomNumber]));
 
-        const tenants = await Promise.all((result.tenants || []).map(withKycViewUrls));
+        const rawTenants = await Promise.all((result.tenants || []).map(withKycViewUrls));
+        const tenants = rawTenants.map(t => {
+            const resolvedRoomNumber = t.roomNumber || roomMap.get(t.roomId) || null;
+            return {
+                ...t,
+                roomNumber: resolvedRoomNumber,
+                roomName: resolvedRoomNumber ? `Room ${resolvedRoomNumber}` : null
+            };
+        });
 
         return response.success({
             message: 'Tenants retrieved successfully',

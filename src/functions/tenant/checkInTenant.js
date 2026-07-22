@@ -98,6 +98,7 @@ exports.handler = async (event) => {
             userId,
             propertyId,
             roomId,
+            roomNumber: room.roomNumber,
             bedNumber,
             name: sanitizeInput(name),
             email: sanitizeInput(email),

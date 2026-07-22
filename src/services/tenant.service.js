@@ -113,9 +113,22 @@ exports.getTenantsByProperty = async (propertyId, limit = 50, lastEvaluatedKey =
         }
 
         const result = await dynamodb.query(params).promise();
-        
+        let tenants = result.Items || [];
+
+        if (tenants.length === 0) {
+            const scanParams = {
+                TableName: TENANT_TABLE,
+                FilterExpression: 'propertyId = :propertyId OR propertyIdIndex = :propertyId',
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId
+                }
+            };
+            const scanResult = await dynamodb.scan(scanParams).promise();
+            tenants = scanResult.Items || [];
+        }
+
         return {
-            tenants: result.Items || [],
+            tenants: tenants,
             lastEvaluatedKey: result.LastEvaluatedKey || null
         };
 

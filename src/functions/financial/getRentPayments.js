@@ -45,16 +45,32 @@ exports.handler = async (event) => {
             payments = payments.filter(p => p.tenantId === tenant.tenantId || p.tenantIdIndex === tenant.tenantId);
         }
 
-        // Auto-upgrade 'pending' → 'overdue' for bills past the 5th (in-memory only, not persisted here)
+        // Fetch rooms and tenants to enrich payment objects with human-readable room numbers and tenant names
+        const [roomsRes, tenantsRes] = await Promise.all([
+            propertyService.getRoomsByProperty(propertyId).catch(() => ({ rooms: [] })),
+            tenantService.getTenantsByProperty(propertyId).catch(() => ({ tenants: [] }))
+        ]);
+        const roomMap = new Map((roomsRes.rooms || []).map(r => [r.roomId, r.roomNumber]));
+        const tenantMap = new Map((tenantsRes.tenants || []).map(t => [t.tenantId, t.name]));
+
+        // Auto-upgrade 'pending' → 'overdue' for bills past due date and enrich roomNumber/tenantName
         const today = new Date();
         payments = payments.map(p => {
-            if (p.paymentStatus === 'pending' && p.dueDate) {
+            let status = p.paymentStatus;
+            if (status === 'pending' && p.dueDate) {
                 const due = new Date(p.dueDate);
                 if (today > due) {
-                    return { ...p, paymentStatus: 'overdue' };
+                    status = 'overdue';
                 }
             }
-            return p;
+            const resolvedRoomNumber = p.roomNumber || roomMap.get(p.roomId) || null;
+            const resolvedTenantName = p.tenantName || tenantMap.get(p.tenantId) || null;
+            return {
+                ...p,
+                paymentStatus: status,
+                roomNumber: resolvedRoomNumber,
+                tenantName: resolvedTenantName
+            };
         });
 
         return response.success({
