@@ -2,6 +2,7 @@ const AWS = require('aws-sdk');
 const financialService = require('../../services/financial.service');
 const propertyService = require('../../services/property.service');
 const { buildTransporter, logEmail, delay, getRentReminderTemplate } = require('../../utils/emailHelper');
+const subscriptionService = require('../../services/subscription.service');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -58,6 +59,17 @@ exports.handler = async (event) => {
             continue;
         }
         if (!property) continue;
+
+        // Automated management actions respect the same read-only state as the UI.
+        try {
+            await subscriptionService.assertOwnerWriteAccess(property.ownerId, { startTrial: false });
+        } catch (error) {
+            if (error instanceof subscriptionService.SubscriptionAccessError) {
+                console.log(`[scheduledRentReminder] subscription locked for owner ${property.ownerId}, skipping property ${propertyId}`);
+                continue;
+            }
+            throw error;
+        }
 
         // Fetch owner details
         let ownerName = property.propertyName;

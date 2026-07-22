@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const financialService = require('../../services/financial.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -40,6 +41,9 @@ exports.handler = async (event) => {
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only add expenses to your properties', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         // Validate expense type
         const validTypes = ['utility', 'maintenance', 'salary', 'repair', 'other'];

@@ -4,6 +4,7 @@ const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput, validateUrl } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
+const subscriptionService = require('../../services/subscription.service');
 
 exports.handler = async (event) => {
     try {
@@ -38,7 +39,8 @@ exports.handler = async (event) => {
             rules,
             images,
             mapLink,
-            property_type
+            property_type,
+            managementEnabled = true
         } = body;
 
         // Validate required fields
@@ -79,6 +81,18 @@ exports.handler = async (event) => {
             validatedMapLink = mapLinkValidation.value;
         }
 
+        // A discovery-only listing is always free. A valid management activation
+        // starts the account's one-time trial and enforces its property limit.
+        if (managementEnabled !== false && dbUser.userType !== 'admin') {
+            try {
+                await subscriptionService.assertCanAddManagedProperty(dbUser.userId);
+            } catch (error) {
+                if (error instanceof subscriptionService.SubscriptionAccessError) {
+                    return response.error(error.message, error.statusCode, error.details);
+                }
+                throw error;
+            }
+        }
         // Sanitize inputs
         const sanitizedPropertyName = sanitizeInput(propertyName);
         const sanitizedAddress = {
@@ -101,7 +115,8 @@ exports.handler = async (event) => {
             rules: rules || [],
             images: normalizeImageKeys(images || []),
             mapLink: validatedMapLink,
-            property_type: property_type
+            property_type: property_type,
+            managementEnabled: managementEnabled !== false
         });
 
         console.log('Property created successfully:', property.propertyId);
@@ -126,6 +141,7 @@ exports.handler = async (event) => {
                 imageKeys: signedProperty.imageKeys,
                 mapLink: signedProperty.mapLink,
                 status: signedProperty.status,
+                managementEnabled: signedProperty.managementEnabled,
                 createdAt: signedProperty.createdAt
             }
         }, 201);

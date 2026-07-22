@@ -33,6 +33,9 @@ exports.createProperty = async (propertyData) => {
             rules: propertyData.rules || [],
             images: propertyData.images || [],
             mapLink: propertyData.mapLink || null,
+            // Discovery-only listings remain free. Existing records without this
+            // field are treated as managed properties for backwards compatibility.
+            managementEnabled: propertyData.managementEnabled !== false,
             status: 'active', // active, inactive, maintenance
             createdAt: timestamp,
             updatedAt: timestamp,
@@ -177,6 +180,11 @@ exports.updateProperty = async (propertyId, updates) => {
         if (updates.mapLink !== undefined) {
             updateExpression += ', mapLink = :mapLink';
             expressionAttributeValues[':mapLink'] = updates.mapLink;
+        }
+
+        if (updates.managementEnabled !== undefined) {
+            updateExpression += ', managementEnabled = :managementEnabled';
+            expressionAttributeValues[':managementEnabled'] = updates.managementEnabled;
         }
 
         if (updates.status !== undefined) {

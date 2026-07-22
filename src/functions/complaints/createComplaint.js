@@ -6,6 +6,7 @@ const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
 const { sendOwnerRequestEmail } = require('../../utils/ownerRequestEmail');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -14,6 +15,11 @@ exports.handler = async (event) => {
         if (!dbUser) {
             return response.error('Unauthorized', 401);
         }
+
+        // Tenant complaints remain available; owner-created management records
+        // follow the SaaS write-access state.
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const body = JSON.parse(event.body);
         const { propertyId } = event.pathParameters;

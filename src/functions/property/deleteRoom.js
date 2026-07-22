@@ -2,6 +2,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
     try {
@@ -22,6 +23,9 @@ exports.handler = async (event) => {
         if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin') {
             return response.error('You can only delete rooms of your own properties', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         // Check if room has active tenants
         if (room.occupiedBeds > 0) {

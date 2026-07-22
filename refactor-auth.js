@@ -62,3 +62,4 @@ function processFile(filePath) {
 }
 
 processDir(functionsDir);
+

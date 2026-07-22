@@ -6,6 +6,7 @@ const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const response = require('../../utils/response');
 const { validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
@@ -27,6 +28,9 @@ exports.handler = async (event) => {
         if (dbUser.userType !== 'owner' && dbUser.userType !== 'admin') {
             return response.error('Only owners can check-in tenants', 403);
         }
+
+        const subscriptionDenied = await guardOwnerWrite(event);
+        if (subscriptionDenied) return subscriptionDenied;
 
         const body = JSON.parse(event.body);
         const { 

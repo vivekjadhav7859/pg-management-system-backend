@@ -3,6 +3,8 @@ const propertyService = require('../../services/property.service');
 const tenantService = require('../../services/tenant.service');
 const financialService = require('../../services/financial.service');
 const response = require('../../utils/response');
+const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
+const subscriptionService = require('../../services/subscription.service');
 
 /**
  * Generate monthly rent bills for all active tenants of a property.
@@ -32,6 +34,8 @@ exports.handler = async (event) => {
             if (dbUser.userType !== 'owner' && dbUser.userType !== 'admin') {
                 return response.error('Only owners or admins can generate bills', 403);
             }
+            const subscriptionDenied = await guardOwnerWrite(event);
+            if (subscriptionDenied) return subscriptionDenied;
         }
 
         // ── Parse request body ────────────────────────────────────────────────
@@ -92,8 +96,24 @@ exports.handler = async (event) => {
         let totalGenerated = 0;
         let totalSkipped   = 0;
         const details = [];
+        const scheduledOwnerAccess = new Map();
 
         for (const propertyId of propertyIds) {
+            if (isScheduled) {
+                const property = await propertyService.getPropertyById(propertyId);
+                if (!property?.ownerId) continue;
+                if (!scheduledOwnerAccess.has(property.ownerId)) {
+                    try {
+                        await subscriptionService.assertOwnerWriteAccess(property.ownerId, { startTrial: false });
+                        scheduledOwnerAccess.set(property.ownerId, true);
+                    } catch (error) {
+                        if (!(error instanceof subscriptionService.SubscriptionAccessError)) throw error;
+                        scheduledOwnerAccess.set(property.ownerId, false);
+                    }
+                }
+                if (!scheduledOwnerAccess.get(property.ownerId)) continue;
+            }
+
             // Get all active tenants for this property
             const tenantsResult = await tenantService.getTenantsByProperty(propertyId);
             const tenants = (tenantsResult.tenants || []).filter(t => t.status === 'active');
