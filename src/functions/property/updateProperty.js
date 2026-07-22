@@ -2,8 +2,9 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
-const { sanitizeInput } = require('../../utils/validator');
+const { sanitizeInput, validateUrl } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
+const { PROPERTY_TYPES, PROPERTY_CATEGORIES } = require('../../utils/constants');
 const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
 
 exports.handler = async (event) => {
@@ -49,11 +50,19 @@ exports.handler = async (event) => {
         }
 
         if (body.propertyType !== undefined) {
-            const validTypes = ['PG', 'Hostel', 'Apartment'];
-            if (!validTypes.includes(body.propertyType)) {
-                return response.error('Invalid property type', 400);
+            const validCategories = Object.values(PROPERTY_CATEGORIES);
+            if (!validCategories.includes(body.propertyType)) {
+                return response.error('Invalid property type (category)', 400);
             }
             updates.propertyType = body.propertyType;
+        }
+
+        if (body.property_type !== undefined) {
+            const validTypes = Object.values(PROPERTY_TYPES);
+            if (!validTypes.includes(body.property_type)) {
+                return response.error('Invalid property_type', 400);
+            }
+            updates.property_type = body.property_type;
         }
 
         if (body.amenities !== undefined) {
@@ -66,6 +75,19 @@ exports.handler = async (event) => {
 
         if (body.images !== undefined) {
             updates.images = normalizeImageKeys(body.images);
+        }
+
+        if (body.mapLink !== undefined) {
+            if (body.mapLink && body.mapLink.trim() !== '') {
+                const mapLinkValidation = validateUrl(body.mapLink);
+                if (!mapLinkValidation.valid) {
+                    return response.error(`Invalid map link: ${mapLinkValidation.message}`, 400);
+                }
+                updates.mapLink = mapLinkValidation.value;
+            } else {
+                // Allow removing the map link by sending an empty string or null
+                updates.mapLink = null;
+            }
         }
 
         if (body.status !== undefined) {
