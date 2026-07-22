@@ -483,3 +483,50 @@ exports.getBedAssignmentsByRoom = async (roomId) => {
         throw error;
     }
 };
+
+/**
+ * Get active bed assignments by tenant
+ */
+exports.getBedAssignmentsByTenant = async (tenantId) => {
+    try {
+        const params = {
+            TableName: BED_ASSIGNMENT_TABLE,
+            IndexName: 'TenantIdIndex',
+            KeyConditionExpression: 'tenantIdIndex = :tenantId',
+            FilterExpression: '#status IN (:assigned, :reserved)',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
+            ExpressionAttributeValues: {
+                ':tenantId': tenantId,
+                ':assigned': 'assigned',
+                ':reserved': 'reserved'
+            }
+        };
+
+        const result = await dynamodb.query(params).promise();
+        return result.Items || [];
+
+    } catch (error) {
+        console.error('Error getting bed assignments by tenant:', error);
+        throw error;
+    }
+};
+
+/**
+ * Release all active bed assignments for a tenant
+ */
+exports.releaseBedByTenant = async (tenantId) => {
+    try {
+        const assignments = await exports.getBedAssignmentsByTenant(tenantId);
+        const released = [];
+        for (const a of assignments) {
+            const rel = await exports.releaseBed(a.assignmentId);
+            released.push(rel);
+        }
+        return released;
+    } catch (error) {
+        console.error('Error releasing bed by tenant:', error);
+        throw error;
+    }
+};

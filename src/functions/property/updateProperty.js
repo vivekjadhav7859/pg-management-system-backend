@@ -2,7 +2,7 @@
 const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const response = require('../../utils/response');
-const { sanitizeInput } = require('../../utils/validator');
+const { sanitizeInput, validateUrl } = require('../../utils/validator');
 const { normalizeImageKeys, withSignedImageUrls } = require('../../utils/propertyImages');
 const { PROPERTY_TYPES, PROPERTY_CATEGORIES } = require('../../utils/constants');
 const { guardOwnerWrite } = require('../../utils/subscriptionGuard');
@@ -75,6 +75,19 @@ exports.handler = async (event) => {
 
         if (body.images !== undefined) {
             updates.images = normalizeImageKeys(body.images);
+        }
+
+        if (body.mapLink !== undefined) {
+            if (body.mapLink && body.mapLink.trim() !== '') {
+                const mapLinkValidation = validateUrl(body.mapLink);
+                if (!mapLinkValidation.valid) {
+                    return response.error(`Invalid map link: ${mapLinkValidation.message}`, 400);
+                }
+                updates.mapLink = mapLinkValidation.value;
+            } else {
+                // Allow removing the map link by sending an empty string or null
+                updates.mapLink = null;
+            }
         }
 
         if (body.status !== undefined) {
