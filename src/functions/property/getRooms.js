@@ -22,9 +22,24 @@ exports.handler = async (event) => {
             return response.error('You can only view rooms of your own properties', 403);
         }
 
-        const result = await propertyService.getRoomsByProperty(propertyId);
+        const sanitizedRooms = (result.rooms || []).map(r => {
+            const total = Number(r.totalBeds) || 1;
+            const occ = r.occupiedBeds !== undefined ? Math.min(total, Math.max(0, Number(r.occupiedBeds))) : 0;
+            const avail = Math.max(0, total - occ);
+            let status = r.status;
+            if (status !== 'maintenance' && status !== 'reserved') {
+                status = avail === 0 ? 'occupied' : 'available';
+            }
+            return {
+                ...r,
+                totalBeds: total,
+                occupiedBeds: occ,
+                availableBeds: avail,
+                status: status
+            };
+        });
 
-        const sortedRooms = (result.rooms || []).sort((a, b) => {
+        const sortedRooms = sanitizedRooms.sort((a, b) => {
             const floorA = a.floor ?? 0;
             const floorB = b.floor ?? 0;
             if (floorA !== floorB) return floorA - floorB;

@@ -408,6 +408,21 @@ exports.updateRoom = async (roomId, updates) => {
             expressionAttributeValues[':floor'] = updates.floor;
         }
 
+        if (updates.totalBeds !== undefined) {
+            updateExpression += ', totalBeds = :totalBeds';
+            expressionAttributeValues[':totalBeds'] = updates.totalBeds;
+        }
+
+        if (updates.occupiedBeds !== undefined) {
+            updateExpression += ', occupiedBeds = :occupiedBeds';
+            expressionAttributeValues[':occupiedBeds'] = updates.occupiedBeds;
+        }
+
+        if (updates.availableBeds !== undefined) {
+            updateExpression += ', availableBeds = :availableBeds';
+            expressionAttributeValues[':availableBeds'] = updates.availableBeds;
+        }
+
         if (updates.rentPerBed !== undefined) {
             updateExpression += ', rentPerBed = :rentPerBed';
             expressionAttributeValues[':rentPerBed'] = updates.rentPerBed;
@@ -492,6 +507,48 @@ exports.deleteRoom = async (roomId) => {
 };
 
 /**
+ * Recalculate room occupancy and status based on active bed assignments
+ */
+exports.recalculateRoomOccupancy = async (roomId) => {
+    try {
+        const room = await exports.getRoomById(roomId);
+        if (!room) return null;
+
+        const tenantService = require('./tenant.service');
+        const activeAssignments = await tenantService.getBedAssignmentsByRoom(roomId);
+        const occupiedCount = activeAssignments.length;
+        const totalBeds = Number(room.totalBeds) || 1;
+        const availableBeds = Math.max(0, totalBeds - occupiedCount);
+
+        let newStatus = room.status;
+        if (room.status !== 'maintenance') {
+            newStatus = availableBeds === 0 ? 'occupied' : 'available';
+        }
+
+        const timestamp = new Date().toISOString();
+        const params = {
+            TableName: ROOM_TABLE,
+            Key: { roomId },
+            UpdateExpression: 'SET occupiedBeds = :occ, availableBeds = :avail, #status = :status, statusIndex = :status, updatedAt = :ts',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: {
+                ':occ': occupiedCount,
+                ':avail': availableBeds,
+                ':status': newStatus,
+                ':ts': timestamp
+            },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        const result = await dynamodb.update(params).promise();
+        return result.Attributes;
+    } catch (error) {
+        console.error('Error recalculating room occupancy:', error);
+        throw error;
+    }
+};
+
+/**
  * Update room occupancy (called when bed is assigned/released)
  */
 exports.updateRoomOccupancy = async (roomId, bedsChange) => {
@@ -514,10 +571,13 @@ exports.updateRoomOccupancy = async (roomId, bedsChange) => {
         const result = await dynamodb.update(params).promise();
         
         // Update room status based on occupancy
-        if (result.Attributes.availableBeds === 0) {
-            await exports.updateRoom(roomId, { status: 'occupied' });
-        } else if (result.Attributes.availableBeds > 0 && result.Attributes.status === 'occupied') {
-            await exports.updateRoom(roomId, { status: 'available' });
+        const roomAttr = result.Attributes;
+        if (roomAttr && roomAttr.status !== 'maintenance') {
+            if (roomAttr.availableBeds <= 0 && roomAttr.status !== 'occupied') {
+                await exports.updateRoom(roomId, { status: 'occupied' });
+            } else if (roomAttr.availableBeds > 0 && roomAttr.status === 'occupied') {
+                await exports.updateRoom(roomId, { status: 'available' });
+            }
         }
 
         return result.Attributes;
