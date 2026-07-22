@@ -4,6 +4,10 @@ service: pg-management-backend
 
 custom:
   kycBucketName: ${self:service}-kyc-documents-${self:provider.stage}
+  cognitoDomain:
+    dev: gobanqodev
+    qa: pg-mgmt-auth-qa-ap-south-1
+    prod: pg-mgmt-auth-prod-ap-south-1
   allowedCorsOrigins:
     - https://gobanqo.com
     - https://www.gobanqo.com
@@ -1236,11 +1240,11 @@ resources:
           - http://localhost:5173/login
           - https://gobanqo.com/login
 
-    CognitoUserPoolDomain:
-      Type: AWS::Cognito::UserPoolDomain
-      Properties:
-        Domain: pg-mgmt-auth-${self:provider.stage}-${self:provider.region}
-        UserPoolId: !Ref CognitoUserPool
+    # CognitoUserPoolDomain:
+    #   Type: AWS::Cognito::UserPoolDomain
+    #   Properties:
+    #     Domain: ${self:custom.cognitoDomain.${self:provider.stage}}
+    #     UserPoolId: !Ref CognitoUserPool
 
     CognitoUserPoolIdentityProviderGoogle:
       Type: AWS::Cognito::UserPoolIdentityProvider
@@ -1250,7 +1254,7 @@ resources:
         UserPoolId: !Ref CognitoUserPool
         ProviderDetails:
           client_id: "1057172668359-o9o1l6moa659flrhdjhr7nsnitfq1gvb.apps.googleusercontent.com"
-          client_secret: "${env:GOOGLE_CLIENT_SECRET, ''}"
+          client_secret: "${env:GOOGLE_CLIENT_SECRET, 'GOCSPX-placeholder-secret-value'}"
           authorize_scopes: "email profile openid"
         AttributeMapping:
           email: "email"
