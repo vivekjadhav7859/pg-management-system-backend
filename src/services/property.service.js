@@ -106,9 +106,27 @@ exports.getPropertiesByOwner = async (ownerId, limit = 50, lastEvaluatedKey = nu
         }
 
         const result = await dynamodb.query(params).promise();
-        
+        let properties = result.Items || [];
+
+        // Fallback: If GSI query returns 0 properties, scan to find properties by ownerId or ownerIdIndex
+        if (properties.length === 0) {
+            const scanParams = {
+                TableName: PROPERTY_TABLE,
+                FilterExpression: '(ownerId = :ownerId OR ownerIdIndex = :ownerId) AND (#status <> :deleted OR attribute_not_exists(#status))',
+                ExpressionAttributeNames: {
+                    '#status': 'status'
+                },
+                ExpressionAttributeValues: {
+                    ':ownerId': ownerId,
+                    ':deleted': 'deleted'
+                }
+            };
+            const scanResult = await dynamodb.scan(scanParams).promise();
+            properties = scanResult.Items || [];
+        }
+
         return {
-            properties: result.Items || [],
+            properties: properties,
             lastEvaluatedKey: result.LastEvaluatedKey || null
         };
 
@@ -373,9 +391,23 @@ exports.getRoomsByProperty = async (propertyId, limit = 50, lastEvaluatedKey = n
         }
 
         const result = await dynamodb.query(params).promise();
-        
+        let rooms = result.Items || [];
+
+        // Fallback: If GSI query returns 0 rooms, perform scan to find unindexed or legacy rooms
+        if (rooms.length === 0) {
+            const scanParams = {
+                TableName: ROOM_TABLE,
+                FilterExpression: 'propertyId = :propertyId OR propertyIdIndex = :propertyId',
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId
+                }
+            };
+            const scanResult = await dynamodb.scan(scanParams).promise();
+            rooms = scanResult.Items || [];
+        }
+
         return {
-            rooms: result.Items || [],
+            rooms: rooms,
             lastEvaluatedKey: result.LastEvaluatedKey || null
         };
 
