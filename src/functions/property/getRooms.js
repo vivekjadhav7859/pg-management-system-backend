@@ -24,10 +24,20 @@ exports.handler = async (event) => {
 
         const result = await propertyService.getRoomsByProperty(propertyId);
 
+        const sortedRooms = (result.rooms || []).sort((a, b) => {
+            const floorA = a.floor ?? 0;
+            const floorB = b.floor ?? 0;
+            if (floorA !== floorB) return floorA - floorB;
+            return (a.roomNumber || '').localeCompare(b.roomNumber || '', undefined, {
+                numeric: true,
+                sensitivity: 'base'
+            });
+        });
+
         return response.success({
             message: 'Rooms retrieved successfully',
-            rooms: result.rooms,
-            count: result.rooms.length,
+            rooms: sortedRooms,
+            count: sortedRooms.length,
             propertyId: propertyId
         });
 

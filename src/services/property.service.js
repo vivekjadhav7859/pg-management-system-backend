@@ -527,3 +527,146 @@ exports.updateRoomOccupancy = async (roomId, bedsChange) => {
         throw error;
     }
 };
+
+// ==================== BULK ROOM OPERATIONS ====================
+
+/**
+ * Fetch all room numbers that already exist for a given property.
+ * Used for conflict detection before bulk insert.
+ *
+ * @param {string} propertyId
+ * @returns {Promise<Set<string>>} Set of existing roomNumber strings
+ */
+exports.getExistingRoomNumbers = async (propertyId) => {
+    try {
+        const existingNumbers = new Set();
+        let lastEvaluatedKey = null;
+
+        // Paginate through ALL rooms for this property (no Limit cap)
+        do {
+            const params = {
+                TableName: ROOM_TABLE,
+                IndexName: 'PropertyIdIndex',
+                KeyConditionExpression: 'propertyIdIndex = :propertyId',
+                FilterExpression: '#status <> :deleted',
+                ExpressionAttributeNames: { '#status': 'status' },
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId,
+                    ':deleted': 'deleted'
+                },
+                ProjectionExpression: 'roomNumber'
+            };
+
+            if (lastEvaluatedKey) {
+                params.ExclusiveStartKey = lastEvaluatedKey;
+            }
+
+            const result = await dynamodb.query(params).promise();
+
+            (result.Items || []).forEach(item => {
+                if (item.roomNumber) existingNumbers.add(item.roomNumber);
+            });
+
+            lastEvaluatedKey = result.LastEvaluatedKey || null;
+
+        } while (lastEvaluatedKey);
+
+        return existingNumbers;
+
+    } catch (error) {
+        console.error('Error fetching existing room numbers:', error);
+        throw error;
+    }
+};
+
+/**
+ * Bulk-create rooms using DynamoDB TransactWriteItems.
+ *
+ * Chunks the rooms array into groups of 90 (DynamoDB hard-limits TransactWriteItems at 100;
+ * we use 90 to leave headroom). Each chunk is atomic (all-or-nothing within the chunk).
+ *
+ * After all chunks succeed, updates property counters atomically with the exact count
+ * of rooms and beds that were inserted.
+ *
+ * @param {Array<{roomNumber,roomType,floor,totalBeds,rentPerBed,securityDeposit,amenities}>} rooms
+ * @param {string} propertyId
+ * @returns {Promise<{created: Array, failed: Array}>}
+ */
+exports.bulkCreateRooms = async (rooms, propertyId) => {
+    const CHUNK_SIZE = 90;
+    const timestamp = new Date().toISOString();
+
+    const createdRooms = [];
+    const failedRooms = [];
+
+    // Build all room items first (assign IDs and timestamps)
+    const roomItems = rooms.map(room => ({
+        roomId: uuidv4(),
+        propertyId: propertyId,
+        roomNumber: room.roomNumber,
+        roomType: room.roomType,
+        floor: room.floor,
+        totalBeds: room.totalBeds,
+        occupiedBeds: 0,
+        availableBeds: room.totalBeds,
+        rentPerBed: room.rentPerBed,
+        securityDeposit: room.securityDeposit || 0,
+        amenities: room.amenities || [],
+        images: [],
+        status: 'available',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        // GSI attributes
+        propertyIdIndex: propertyId,
+        statusIndex: 'available'
+    }));
+
+    // Chunk into groups of CHUNK_SIZE
+    for (let i = 0; i < roomItems.length; i += CHUNK_SIZE) {
+        const chunk = roomItems.slice(i, i + CHUNK_SIZE);
+
+        const transactItems = chunk.map(item => ({
+            Put: {
+                TableName: ROOM_TABLE,
+                Item: item
+            }
+        }));
+
+        try {
+            await dynamodb.transactWrite({ TransactItems: transactItems }).promise();
+            createdRooms.push(...chunk);
+        } catch (error) {
+            console.error(`Bulk room insert chunk ${Math.floor(i / CHUNK_SIZE) + 1} failed:`, error);
+            // Record all rooms in this chunk as failed
+            failedRooms.push(...chunk.map(r => ({
+                roomNumber: r.roomNumber,
+                reason: 'Transaction failed'
+            })));
+        }
+    }
+
+    // Atomically update property counters for successfully created rooms
+    if (createdRooms.length > 0) {
+        const totalNewBeds = createdRooms.reduce((acc, r) => acc + r.totalBeds, 0);
+        const timestamp2 = new Date().toISOString();
+
+        try {
+            await dynamodb.update({
+                TableName: PROPERTY_TABLE,
+                Key: { propertyId: propertyId },
+                UpdateExpression: 'ADD totalRooms :roomCount, totalBeds :bedCount, availableBeds :bedCount SET updatedAt = :ts',
+                ExpressionAttributeValues: {
+                    ':roomCount': createdRooms.length,
+                    ':bedCount': totalNewBeds,
+                    ':ts': timestamp2
+                },
+                ReturnValues: 'ALL_NEW'
+            }).promise();
+        } catch (error) {
+            console.error('Failed to update property counters after bulk room insert:', error);
+            // Non-fatal — rooms were created; counters can be recalculated
+        }
+    }
+
+    return { created: createdRooms, failed: failedRooms };
+};

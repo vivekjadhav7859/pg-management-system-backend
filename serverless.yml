@@ -115,9 +115,10 @@ provider:
             - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
             - !GetAtt EmailLogsTable.Arn
             - !Sub "${EmailLogsTable.Arn}/index/*"
-            - !GetAtt SubscriptionsTable.Arn
-            - !Sub "${SubscriptionsTable.Arn}/index/*"
-            - !GetAtt WebhookEventsTable.Arn
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}/index/*"
 
         # DynamoDB Streams read permission
         - Effect: Allow
@@ -463,6 +464,21 @@ functions:
     events:
       - http:
           path: properties/{propertyId}/rooms
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  bulkAddRooms:
+    handler: src/functions/property/bulkAddRooms.handler
+    timeout: 29
+    events:
+      - http:
+          path: properties/{propertyId}/rooms/bulk
           method: post
           cors: *corsConfig
 
@@ -1701,48 +1717,12 @@ resources:
           - Key: Service
             Value: ${self:service}
 
-    # One current prepaid entitlement/trial record per owner.
-    SubscriptionsTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Retain
-      Properties:
-        TableName: ${self:service}-subscriptions-${self:provider.stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: ownerId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: ownerId
-            KeyType: HASH
-        PointInTimeRecoverySpecification:
-          PointInTimeRecoveryEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
+    # Pre-existing in DynamoDB: SubscriptionsTable and WebhookEventsTable
+    # SubscriptionsTable:
+    #   Type: AWS::DynamoDB::Table
+    # WebhookEventsTable:
+    #   Type: AWS::DynamoDB::Table
 
-    # Razorpay can retry and reorder webhooks; event IDs make processing idempotent.
-    WebhookEventsTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Retain
-      Properties:
-        TableName: ${self:service}-webhook-events-${self:provider.stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: eventId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: eventId
-            KeyType: HASH
-        TimeToLiveSpecification:
-          AttributeName: expiresAt
-          Enabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
 
     # ============ KMS KEY FOR SMTP CREDENTIALS ============
     SmtpCredentialsKey:
