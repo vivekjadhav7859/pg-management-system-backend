@@ -35,8 +35,29 @@ exports.handler = async (event) => {
             filteredComplaints = complaints.filter(c => c.tenantIdIndex === tenant.tenantId);
         }
 
+        // Enrich complaints with roomNumber and tenantName
+        const [roomsRes, tenantsRes] = await Promise.all([
+            propertyService.getRoomsByProperty(propertyId).catch(() => ({ rooms: [] })),
+            tenantService.getTenantsByProperty(propertyId).catch(() => ({ tenants: [] }))
+        ]);
+        const roomMap = new Map((roomsRes.rooms || []).map(r => [r.roomId, r.roomNumber]));
+        const tenantMap = new Map((tenantsRes.tenants || []).map(t => [t.tenantId, t]));
+
+        const enrichedComplaints = filteredComplaints.map(c => {
+            const tenantObj = tenantMap.get(c.tenantIdIndex || c.tenantId);
+            const resolvedRoomId = c.roomId || tenantObj?.roomId;
+            const resolvedRoomNumber = c.roomNumber || roomMap.get(resolvedRoomId) || tenantObj?.roomNumber || null;
+            const resolvedTenantName = c.tenantName || tenantObj?.name || null;
+            return {
+                ...c,
+                roomId: resolvedRoomId || c.roomId,
+                roomNumber: resolvedRoomNumber,
+                tenantName: resolvedTenantName
+            };
+        });
+
         return response.success({
-            complaints: filteredComplaints
+            complaints: enrichedComplaints
         });
 
     } catch (err) {

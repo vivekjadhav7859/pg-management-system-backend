@@ -22,6 +22,8 @@ exports.handler = async (event) => {
             return response.error('You can only view rooms of your own properties', 403);
         }
 
+        const result = await propertyService.getRoomsByProperty(propertyId);
+
         const sanitizedRooms = (result.rooms || []).map(r => {
             const total = Number(r.totalBeds) || 1;
             const occ = r.occupiedBeds !== undefined ? Math.min(total, Math.max(0, Number(r.occupiedBeds))) : 0;

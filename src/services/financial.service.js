@@ -109,9 +109,22 @@ exports.getRentPaymentsByProperty = async (propertyId, limit = 50, lastEvaluated
         }
 
         const result = await dynamodb.query(params).promise();
-        
+        let payments = result.Items || [];
+
+        if (payments.length === 0) {
+            const scanParams = {
+                TableName: RENT_PAYMENT_TABLE,
+                FilterExpression: 'propertyId = :propertyId OR propertyIdIndex = :propertyId',
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId
+                }
+            };
+            const scanResult = await dynamodb.scan(scanParams).promise();
+            payments = scanResult.Items || [];
+        }
+
         return {
-            payments: result.Items || [],
+            payments: payments,
             lastEvaluatedKey: result.LastEvaluatedKey || null
         };
 
@@ -343,9 +356,22 @@ exports.getExpensesByProperty = async (propertyId, limit = 50, lastEvaluatedKey 
         }
 
         const result = await dynamodb.query(params).promise();
-        
+        let expenses = result.Items || [];
+
+        if (expenses.length === 0) {
+            const scanParams = {
+                TableName: EXPENSE_TABLE,
+                FilterExpression: 'propertyId = :propertyId OR propertyIdIndex = :propertyId',
+                ExpressionAttributeValues: {
+                    ':propertyId': propertyId
+                }
+            };
+            const scanResult = await dynamodb.scan(scanParams).promise();
+            expenses = scanResult.Items || [];
+        }
+
         return {
-            expenses: result.Items || [],
+            expenses: expenses,
             lastEvaluatedKey: result.LastEvaluatedKey || null
         };
 
@@ -464,11 +490,11 @@ exports.getMonthlyFinancialReport = async (propertyId, month) => {
         // Calculate totals
         const totalRentCollected = rentPayments
             .filter(p => p.paymentStatus === 'completed')
-            .reduce((sum, p) => sum + p.finalAmount, 0);
+            .reduce((sum, p) => sum + (p.finalAmount ?? p.amount ?? 0), 0);
 
         const totalRentPending = rentPayments
             .filter(p => p.paymentStatus === 'pending' || p.paymentStatus === 'overdue')
-            .reduce((sum, p) => sum + p.finalAmount, 0);
+            .reduce((sum, p) => sum + (p.finalAmount ?? p.amount ?? 0), 0);
 
         const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
