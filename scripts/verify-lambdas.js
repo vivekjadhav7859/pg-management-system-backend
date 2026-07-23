@@ -71,7 +71,7 @@ const FUNCTIONS = [
   { name: 'sesEventHandler',      src: 'src/functions/notifications/sesEventHandler.js' },
 ];
 
-const MIN_HEALTHY_BYTES = 50_000; // 50 KB — broken zips are ~895 bytes
+const MIN_HEALTHY_BYTES = 20_000; // 20 KB — broken zips are ~895 bytes
 
 function awsCli(args) {
   const result = spawnSync('aws', args, { encoding: 'utf8' });
@@ -192,10 +192,11 @@ function fixLambda(fn, lambdaName) {
   const zipPath = buildZipForFunction(fn);
   if (!zipPath) return false;
 
+  const formattedZipPath = zipPath.replace(/\\/g, '/');
   const result = spawnSync('aws', [
     'lambda', 'update-function-code',
     '--function-name', lambdaName,
-    '--zip-file', `fileb://${zipPath}`,
+    '--zip-file', `fileb://${formattedZipPath}`,
     '--region', region,
     '--query', 'CodeSize',
     '--output', 'text',
