@@ -33,9 +33,18 @@ exports.handler = async (event) => {
         const body = JSON.parse(event.body);
         const updates = {};
 
+        if (body.expenseType !== undefined) updates.expenseType = sanitizeInput(body.expenseType);
+        if (body.category !== undefined) updates.category = sanitizeInput(body.category);
         if (body.amount !== undefined) updates.amount = body.amount;
+        if (body.expenseDate !== undefined) updates.expenseDate = body.expenseDate;
+        if (body.expenseMonth !== undefined) updates.expenseMonth = body.expenseMonth;
+        if (body.paymentMode !== undefined) updates.paymentMode = sanitizeInput(body.paymentMode);
+        if (body.paidTo !== undefined) updates.paidTo = sanitizeInput(body.paidTo);
+        if (body.billNumber !== undefined) updates.billNumber = sanitizeInput(body.billNumber);
         if (body.description !== undefined) updates.description = sanitizeInput(body.description);
         if (body.notes !== undefined) updates.notes = sanitizeInput(body.notes);
+        if (body.recurring !== undefined) updates.recurring = Boolean(body.recurring);
+        if (body.frequency !== undefined) updates.frequency = sanitizeInput(body.frequency);
 
         if (Object.keys(updates).length === 0) {
             return response.error('No valid fields to update', 400);

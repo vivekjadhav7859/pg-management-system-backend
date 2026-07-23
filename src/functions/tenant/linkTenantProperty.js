@@ -36,6 +36,35 @@ exports.handler = async (event) => {
 
         const invite = codeResult.Items[0];
 
+        // Legacy code auto-heal: if expiresAt missing, default to 90 days from now
+        if (!invite.expiresAt) {
+            const NinetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+            const newExpiry = new Date(Date.now() + NinetyDaysMs).toISOString();
+            invite.expiresAt = newExpiry;
+            dynamodb.update({
+                TableName: process.env.INVITE_CODE_TABLE,
+                Key: { propertyId: invite.propertyId },
+                UpdateExpression: 'SET expiresAt = :exp, status = :st, updatedAt = :ts',
+                ExpressionAttributeValues: {
+                    ':exp': newExpiry,
+                    ':st': 'active',
+                    ':ts': new Date().toISOString(),
+                },
+            }).promise().catch((e) => console.warn('[linkTenantProperty] legacy code update warning:', e.message));
+        }
+
+        if (invite.expiresAt && new Date() > new Date(invite.expiresAt)) {
+            const { notifyOwnerLinkExpired } = require('../../utils/expiredLinkAlert');
+            await notifyOwnerLinkExpired({
+                ownerId: invite.ownerId,
+                propertyId: invite.propertyId,
+                propertyName: invite.propertyName,
+                code: invite.code,
+                linkType: 'property_invite',
+            });
+            return response.error('Property invitation code has expired after 3 months. The owner has been notified.', 410);
+        }
+
         const [tenantUserResult, propertyResult, ownerResult] = await Promise.all([
             dynamodb.get({
                 TableName: process.env.USER_TABLE,

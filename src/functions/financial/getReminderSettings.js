@@ -1,5 +1,3 @@
-
-const dynamoService = require('../../services/dynamodb.service');
 const propertyService = require('../../services/property.service');
 const financialService = require('../../services/financial.service');
 const response = require('../../utils/response');
@@ -26,15 +24,25 @@ exports.handler = async (event) => {
 
         const settings = await financialService.getReminderSettings(propertyId);
 
+        const responseSettings = {
+            propertyId: propertyId,
+            autoEnabled: settings?.autoEnabled ?? true,
+            daysBefore: settings?.daysBefore ?? 3,
+            daysAfter: settings?.daysAfter ?? 2,
+            channels: settings?.channels || ['email'],
+            welcomeEnabled: settings?.welcomeEnabled ?? true,
+            rentReminderEnabled: settings?.rentReminderEnabled ?? true,
+            receiptEnabled: settings?.receiptEnabled ?? true,
+            overdueEnabled: settings?.overdueEnabled ?? true,
+            complaintUpdatesEnabled: settings?.complaintUpdatesEnabled ?? true,
+            provider: 'AWS_SES',
+            providerStatus: 'ACTIVE',
+            updatedAt: settings?.updatedAt || new Date().toISOString()
+        };
+
         return response.success({
-            message: 'Reminder settings retrieved successfully',
-            settings: settings || {
-                propertyId: propertyId,
-                autoEnabled: true,
-                daysBefore: 3,
-                daysAfter: 2,
-                channels: ['email']
-            }
+            message: 'Notification settings retrieved successfully',
+            settings: responseSettings
         });
 
     } catch (err) {

@@ -83,6 +83,15 @@ exports.handler = async (event) => {
         // Sanitize inputs
         const sanitizedRoomNumber = sanitizeInput(roomNumber);
 
+        // Check if room number already exists in this property
+        const existingNumbers = await propertyService.getExistingRoomNumbers(propertyId);
+        const isDuplicate = Array.from(existingNumbers).some(
+            num => String(num).trim().toLowerCase() === sanitizedRoomNumber.trim().toLowerCase()
+        );
+        if (isDuplicate) {
+            return response.error(`Room number "${sanitizedRoomNumber}" already exists in this property`, 400);
+        }
+
         // Create room
         const room = await propertyService.createRoom({
             propertyId: propertyId,

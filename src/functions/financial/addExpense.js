@@ -22,7 +22,8 @@ exports.handler = async (event) => {
         const { 
             propertyId, expenseType, category, amount,
             expenseDate, expenseMonth, paymentMode,
-            paidTo, billNumber, description, notes
+            paidTo, billNumber, description, notes,
+            recurring, frequency
         } = body;
 
         const requiredValidation = validateRequiredFields(body, [
@@ -64,6 +65,8 @@ exports.handler = async (event) => {
             billNumber: billNumber ? sanitizeInput(billNumber) : null,
             description: description ? sanitizeInput(description) : null,
             notes: notes ? sanitizeInput(notes) : null,
+            recurring: Boolean(recurring),
+            frequency: frequency ? sanitizeInput(frequency) : null,
             createdBy: dbUser.userId
         });
 
@@ -80,6 +83,8 @@ exports.handler = async (event) => {
                 expenseDate: expense.expenseDate,
                 expenseMonth: expense.expenseMonth,
                 paymentMode: expense.paymentMode,
+                recurring: expense.recurring,
+                frequency: expense.frequency,
                 createdAt: expense.createdAt
             }
         }, 201);
