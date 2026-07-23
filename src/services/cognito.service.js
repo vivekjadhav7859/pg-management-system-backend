@@ -1,16 +1,31 @@
-const AWS = require('aws-sdk');
+const {
+    CognitoIdentityProviderClient,
+    AdminSetUserPasswordCommand,
+    AdminCreateUserCommand,
+    AdminUpdateUserAttributesCommand,
+    AdminInitiateAuthCommand,
+    AdminGetUserCommand,
+    SignUpCommand,
+    ConfirmSignUpCommand,
+    ResendConfirmationCodeCommand,
+    ForgotPasswordCommand,
+    ConfirmForgotPasswordCommand,
+    GlobalSignOutCommand,
+    GetUserCommand
+} = require('@aws-sdk/client-cognito-identity-provider');
 
-const cognito = new AWS.CognitoIdentityServiceProvider();
+const cognitoClient = new CognitoIdentityProviderClient({ region: process.env.AWS_REGION || 'ap-south-1' });
 const USER_POOL_ID = process.env.USER_POOL_ID;
 const USER_POOL_CLIENT_ID = process.env.USER_POOL_CLIENT_ID;
 
 const setPermanentPassword = async (email, password) => {
-    await cognito.adminSetUserPassword({
+    const command = new AdminSetUserPasswordCommand({
         UserPoolId: USER_POOL_ID,
         Username: email,
         Password: password,
         Permanent: true
-    }).promise();
+    });
+    await cognitoClient.send(command);
 };
 
 exports.setUserPassword = setPermanentPassword;
@@ -20,7 +35,6 @@ exports.setUserPassword = setPermanentPassword;
  */
 exports.createUser = async (email, password, userAttributes = {}) => {
     try {
-        // Create user in Cognito
         const params = {
             UserPoolId: USER_POOL_ID,
             Username: email,
@@ -38,7 +52,6 @@ exports.createUser = async (email, password, userAttributes = {}) => {
             MessageAction: 'SUPPRESS' // Don't send welcome email
         };
 
-        // Add custom attributes if provided
         if (userAttributes.name) {
             params.UserAttributes.push({
                 Name: 'name',
@@ -53,9 +66,8 @@ exports.createUser = async (email, password, userAttributes = {}) => {
             });
         }
 
-        // Note: userType is stored only in DynamoDB, not in Cognito
-
-        const createUserResponse = await cognito.adminCreateUser(params).promise();
+        const command = new AdminCreateUserCommand(params);
+        const createUserResponse = await cognitoClient.send(command);
 
         // Set permanent password
         await setPermanentPassword(email, password);
@@ -69,9 +81,9 @@ exports.createUser = async (email, password, userAttributes = {}) => {
     } catch (error) {
         console.error('Error creating user in Cognito:', error);
         
-        if (error.code === 'UsernameExistsException') {
+        if (error.name === 'UsernameExistsException' || error.code === 'UsernameExistsException') {
             const usernameExistsError = new Error('User with this email already exists');
-            usernameExistsError.code = error.code;
+            usernameExistsError.code = 'UsernameExistsException';
             throw usernameExistsError;
         }
         
@@ -104,7 +116,8 @@ exports.createInvitedUser = async (email, userAttributes = {}) => {
             params.UserAttributes.push({ Name: 'phone_number', Value: userAttributes.phone_number });
         }
 
-        const response = await cognito.adminCreateUser(params).promise();
+        const command = new AdminCreateUserCommand(params);
+        const response = await cognitoClient.send(command);
         return {
             userId: response.User.Username,
             email: email,
@@ -112,9 +125,9 @@ exports.createInvitedUser = async (email, userAttributes = {}) => {
         };
     } catch (error) {
         console.error('Error creating invited user in Cognito:', error);
-        if (error.code === 'UsernameExistsException') {
+        if (error.name === 'UsernameExistsException' || error.code === 'UsernameExistsException') {
             const usernameExistsError = new Error('User with this email already exists');
-            usernameExistsError.code = error.code;
+            usernameExistsError.code = 'UsernameExistsException';
             throw usernameExistsError;
         }
         throw error;
@@ -131,13 +144,13 @@ exports.updateUserAttributes = async (email, attributes = []) => {
             Username: email,
             UserAttributes: attributes
         };
-        await cognito.adminUpdateUserAttributes(params).promise();
+        const command = new AdminUpdateUserAttributesCommand(params);
+        await cognitoClient.send(command);
     } catch (error) {
         console.error('Error updating user attributes in Cognito:', error);
         throw error;
     }
 };
-
 
 /**
  * Login user and return authentication tokens
@@ -154,7 +167,8 @@ exports.loginUser = async (email, password) => {
             }
         };
 
-        const response = await cognito.adminInitiateAuth(params).promise();
+        const command = new AdminInitiateAuthCommand(params);
+        const response = await cognitoClient.send(command);
 
         return response.AuthenticationResult;
 
@@ -174,13 +188,16 @@ exports.getUserDetails = async (email) => {
             Username: email
         };
 
-        const response = await cognito.adminGetUser(params).promise();
+        const command = new AdminGetUserCommand(params);
+        const response = await cognitoClient.send(command);
 
         // Convert attributes array to object
         const attributes = {};
-        response.UserAttributes.forEach(attr => {
-            attributes[attr.Name] = attr.Value;
-        });
+        if (response.UserAttributes) {
+            response.UserAttributes.forEach(attr => {
+                attributes[attr.Name] = attr.Value;
+            });
+        }
 
         return {
             userId: response.Username,
@@ -214,7 +231,8 @@ exports.refreshToken = async (refreshToken) => {
             }
         };
 
-        const response = await cognito.adminInitiateAuth(params).promise();
+        const command = new AdminInitiateAuthCommand(params);
+        const response = await cognitoClient.send(command);
 
         return response.AuthenticationResult;
 
@@ -247,7 +265,8 @@ exports.signUpUser = async (email, password, userAttributes = {}) => {
             UserAttributes: attributes
         };
 
-        const response = await cognito.signUp(params).promise();
+        const command = new SignUpCommand(params);
+        const response = await cognitoClient.send(command);
         return {
             userId: response.UserSub,
             email: email,
@@ -269,7 +288,8 @@ exports.confirmUserEmail = async (email, confirmationCode) => {
             Username: email,
             ConfirmationCode: confirmationCode
         };
-        await cognito.confirmSignUp(params).promise();
+        const command = new ConfirmSignUpCommand(params);
+        await cognitoClient.send(command);
     } catch (error) {
         console.error('Error confirming user email:', error);
         throw error;
@@ -285,7 +305,8 @@ exports.resendConfirmationCode = async (email) => {
             ClientId: USER_POOL_CLIENT_ID,
             Username: email
         };
-        await cognito.resendConfirmationCode(params).promise();
+        const command = new ResendConfirmationCodeCommand(params);
+        await cognitoClient.send(command);
     } catch (error) {
         console.error('Error resending confirmation code:', error);
         throw error;
@@ -301,7 +322,8 @@ exports.forgotPassword = async (email) => {
             ClientId: USER_POOL_CLIENT_ID,
             Username: email
         };
-        await cognito.forgotPassword(params).promise();
+        const command = new ForgotPasswordCommand(params);
+        await cognitoClient.send(command);
     } catch (error) {
         console.error('Error initiating forgot password:', error);
         throw error;
@@ -319,7 +341,8 @@ exports.confirmForgotPassword = async (email, confirmationCode, newPassword) => 
             ConfirmationCode: confirmationCode,
             Password: newPassword
         };
-        await cognito.confirmForgotPassword(params).promise();
+        const command = new ConfirmForgotPasswordCommand(params);
+        await cognitoClient.send(command);
     } catch (error) {
         console.error('Error confirming forgot password:', error);
         throw error;
@@ -335,7 +358,8 @@ exports.logoutUser = async (accessToken) => {
             AccessToken: accessToken
         };
 
-        await cognito.globalSignOut(params).promise();
+        const command = new GlobalSignOutCommand(params);
+        await cognitoClient.send(command);
 
     } catch (error) {
         console.error('Error logging out user:', error);
@@ -352,13 +376,16 @@ exports.verifyToken = async (accessToken) => {
             AccessToken: accessToken
         };
 
-        const response = await cognito.getUser(params).promise();
+        const command = new GetUserCommand(params);
+        const response = await cognitoClient.send(command);
 
         // Convert attributes array to object
         const attributes = {};
-        response.UserAttributes.forEach(attr => {
-            attributes[attr.Name] = attr.Value;
-        });
+        if (response.UserAttributes) {
+            response.UserAttributes.forEach(attr => {
+                attributes[attr.Name] = attr.Value;
+            });
+        }
 
         return {
             userId: response.Username,

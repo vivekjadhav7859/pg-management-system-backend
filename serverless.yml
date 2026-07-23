@@ -181,9 +181,6 @@ build:
     # Keep packaging stable in local and CI environments by limiting the
     # number of Lambda functions esbuild processes at the same time.
     buildConcurrency: 3
-    exclude:
-      - aws-sdk
-      - "@aws-sdk/client-cognito-identity-provider"
 
 functions:
   cognitoPreSignUp:

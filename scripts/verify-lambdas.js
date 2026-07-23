@@ -22,6 +22,7 @@ const os = require('os');
 const args = process.argv.slice(2);
 const stage = args.includes('--stage') ? args[args.indexOf('--stage') + 1] : 'dev';
 const autoFix = !args.includes('--no-fix');
+const forceRebuild = args.includes('--force');
 const region = 'ap-south-1';
 const service = 'pg-management-backend';
 
@@ -97,7 +98,7 @@ function getLambdaCodeSize(functionName) {
 function resolveBuiltFile(fn) {
   const buildDir = path.join(__dirname, '..', '.serverless', 'build');
   const fromPackage = path.join(buildDir, fn.src);
-  if (fs.existsSync(fromPackage)) {
+  if (!forceRebuild && fs.existsSync(fromPackage)) {
     return fromPackage;
   }
 
@@ -227,8 +228,8 @@ async function main() {
 
     if (size < 0) {
       console.log(`  ⚠️  ${fn.name}: NOT FOUND (skipping)`);
-    } else if (size < MIN_HEALTHY_BYTES) {
-      console.log(`  ❌ ${fn.name}: ${size} bytes — BROKEN`);
+    } else if (forceRebuild || size < MIN_HEALTHY_BYTES) {
+      console.log(`  ❌ ${fn.name}: ${size} bytes — ${forceRebuild ? 'REBUILDING' : 'BROKEN'}`);
       broken.push(fn);
     } else {
       console.log(`  ✅ ${fn.name}: ${(size / 1024).toFixed(0)} KB`);
