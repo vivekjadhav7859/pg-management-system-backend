@@ -41,7 +41,7 @@ exports.handler = async (event) => {
         const roomsWithAvailableBeds = [];
 
         for (const r of rawRooms) {
-            if (r.status === 'maintenance') continue;
+            if (r.status === 'deleted' || r.status === 'maintenance') continue;
 
             const total = Number(r.totalBeds) || 1;
             const activeAssignments = await tenantService.getBedAssignmentsByRoom(r.roomId);

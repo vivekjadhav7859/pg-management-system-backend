@@ -36,6 +36,7 @@ exports.decryptSecret = async (cipherText) => {
 
     const result = await kmsClient.send(command);
     return Buffer.from(result.Plaintext).toString('utf8');
+};
 /**
  * Generates a 256-bit cryptographically secure random token hex string.
  * @returns {string} 64-character hex string

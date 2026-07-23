@@ -457,6 +457,11 @@ class NotificationService {
                         ':uAt': new Date().toISOString()
                     }
                 }).promise();
+            }
+        } catch (err) {
+            console.error('[NotificationService.updateLogStatus] Error:', err);
+        }
+    }
     /**
      * Delete notification / request by ID from NOTIFICATION_TABLE
      */

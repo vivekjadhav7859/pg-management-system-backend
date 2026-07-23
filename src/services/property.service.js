@@ -380,8 +380,13 @@ exports.getRoomsByProperty = async (propertyId, limit = 50, lastEvaluatedKey = n
             TableName: ROOM_TABLE,
             IndexName: 'PropertyIdIndex',
             KeyConditionExpression: 'propertyIdIndex = :propertyId',
+            FilterExpression: '#status <> :deleted OR attribute_not_exists(#status)',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            },
             ExpressionAttributeValues: {
-                ':propertyId': propertyId
+                ':propertyId': propertyId,
+                ':deleted': 'deleted'
             },
             Limit: limit
         };
@@ -397,14 +402,21 @@ exports.getRoomsByProperty = async (propertyId, limit = 50, lastEvaluatedKey = n
         if (rooms.length === 0) {
             const scanParams = {
                 TableName: ROOM_TABLE,
-                FilterExpression: 'propertyId = :propertyId OR propertyIdIndex = :propertyId',
+                FilterExpression: '(propertyId = :propertyId OR propertyIdIndex = :propertyId) AND (#status <> :deleted OR attribute_not_exists(#status))',
+                ExpressionAttributeNames: {
+                    '#status': 'status'
+                },
                 ExpressionAttributeValues: {
-                    ':propertyId': propertyId
+                    ':propertyId': propertyId,
+                    ':deleted': 'deleted'
                 }
             };
             const scanResult = await dynamodb.scan(scanParams).promise();
             rooms = scanResult.Items || [];
         }
+
+        // Filter out deleted rooms
+        rooms = rooms.filter(room => room && room.status !== 'deleted');
 
         return {
             rooms: rooms,
