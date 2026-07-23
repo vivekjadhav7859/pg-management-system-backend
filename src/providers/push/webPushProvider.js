@@ -13,8 +13,8 @@ try {
 class WebPushProvider extends NotificationProvider {
     constructor() {
         super();
-        this.publicKey = process.env.VAPID_PUBLIC_KEY || '';
-        this.privateKey = process.env.VAPID_PRIVATE_KEY || '';
+        this.publicKey = process.env.VAPID_PUBLIC_KEY || 'BLoZ4JFQk6qq0UVqh-6yxEDm6mH1HbRwHpkiw6lMUPigOkivUUJ4SI7J8KHWJccdyDWzn-cdIq2z6vwbYzoU4Io';
+        this.privateKey = process.env.VAPID_PRIVATE_KEY || 'rsBVKQW9UkEICpFp9zZlEdRPrmiEFSqnSywdzGs_gsE';
         this.subject = process.env.VAPID_SUBJECT || 'mailto:support@gobanqo.com';
 
         if (webpush && this.publicKey && this.privateKey) {
@@ -25,6 +25,7 @@ class WebPushProvider extends NotificationProvider {
             }
         }
     }
+
 
     get channel() {
         return 'push';
