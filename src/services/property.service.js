@@ -212,11 +212,6 @@ exports.updateProperty = async (propertyId, updates) => {
             expressionAttributeNames['#status'] = 'status';
         }
 
-        if (updates.property_type !== undefined) {
-            updateExpression += ', property_type = :property_type';
-            expressionAttributeValues[':property_type'] = updates.property_type;
-        }
-
         const params = {
             TableName: PROPERTY_TABLE,
             Key: {
