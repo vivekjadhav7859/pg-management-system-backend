@@ -34,6 +34,7 @@ provider:
   runtime: nodejs20.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
+  deploymentBucket: ${env:DEPLOYMENT_BUCKET, 'serverless-framework-deployments-ap-south-1-5fca437e-9fb3'}
   # Keep functions on $LATEST. Publishing a version for every function adds one
   # CloudFormation resource each and pushes this stack past AWS's 500-resource limit.
   versionFunctions: false
