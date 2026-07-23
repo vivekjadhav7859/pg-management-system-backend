@@ -39,7 +39,8 @@ exports.handler = async (event) => {
             welcomeEnabled,
             rentReminderEnabled,
             receiptEnabled,
-            overdueEnabled
+            overdueEnabled,
+            complaintUpdatesEnabled
         } = body;
 
         // Validate daysBefore and daysAfter
@@ -61,6 +62,7 @@ exports.handler = async (event) => {
             rentReminderEnabled: rentReminderEnabled !== undefined ? rentReminderEnabled : true,
             receiptEnabled: receiptEnabled !== undefined ? receiptEnabled : true,
             overdueEnabled: overdueEnabled !== undefined ? overdueEnabled : true,
+            complaintUpdatesEnabled: complaintUpdatesEnabled !== undefined ? complaintUpdatesEnabled : true,
             updatedAt: new Date().toISOString()
         };
 
@@ -78,6 +80,7 @@ exports.handler = async (event) => {
                 rentReminderEnabled: settings.rentReminderEnabled,
                 receiptEnabled: settings.receiptEnabled,
                 overdueEnabled: settings.overdueEnabled,
+                complaintUpdatesEnabled: settings.complaintUpdatesEnabled,
                 provider: 'AWS_SES',
                 updatedAt: settings.updatedAt
             }

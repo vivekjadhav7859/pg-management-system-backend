@@ -1,34 +1,63 @@
 /**
- * SESProvider - AWS SES Email Provider implementation.
+ * SESProvider - AWS SES Email Provider implementation extending NotificationProvider.
  */
 const AWS = require('aws-sdk');
+const NotificationProvider = require('../notificationProvider');
 
-class SESProvider {
+class SESProvider extends NotificationProvider {
     constructor() {
+        super();
         this.region = process.env.SES_REGION || process.env.AWS_REGION || 'ap-south-1';
         this.ses = new AWS.SES({ region: this.region });
         this.fromEmail = process.env.SES_FROM_EMAIL || 'noreply@gobanqo.com';
     }
 
+    get channel() {
+        return 'email';
+    }
+
+    /**
+     * Sanitize header strings to prevent email header injection
+     */
+    sanitizeHeader(value) {
+        if (!value) return '';
+        return String(value).replace(/[\r\n]/g, '').trim();
+    }
+
     /**
      * Send email via AWS SES
      */
-    async sendEmail({ to, from, replyTo, subject, html, text, tags = [] }) {
-        const sender = from || `GoBanqo Notifications <${this.fromEmail}>`;
-        
+    async send({ to, from, replyTo, subject, html, text, tags = [] }) {
+        const targetAddress = Array.isArray(to) ? to : [to];
+        const cleanRecipients = targetAddress.map(addr => this.sanitizeHeader(addr)).filter(Boolean);
+
+        if (cleanRecipients.length === 0) {
+            return {
+                success: false,
+                error: 'No valid recipient email address provided',
+                provider: 'ses'
+            };
+        }
+
+        const senderDisplay = from 
+            ? this.sanitizeHeader(from)
+            : `"GoBanqo Notifications" <${this.fromEmail}>`;
+
+        const cleanSubject = this.sanitizeHeader(subject || 'GoBanqo Notification');
+
         const params = {
-            Source: sender,
+            Source: senderDisplay,
             Destination: {
-                ToAddresses: Array.isArray(to) ? to : [to]
+                ToAddresses: cleanRecipients
             },
             Message: {
                 Subject: {
-                    Data: subject,
+                    Data: cleanSubject,
                     Charset: 'UTF-8'
                 },
                 Body: {
                     Html: {
-                        Data: html,
+                        Data: html || '',
                         Charset: 'UTF-8'
                     }
                 }
@@ -43,13 +72,18 @@ class SESProvider {
         }
 
         if (replyTo) {
-            params.ReplyToAddresses = Array.isArray(replyTo) ? replyTo : [replyTo];
+            const cleanReplyTo = Array.isArray(replyTo) 
+                ? replyTo.map(r => this.sanitizeHeader(r)).filter(Boolean)
+                : [this.sanitizeHeader(replyTo)].filter(Boolean);
+            if (cleanReplyTo.length > 0) {
+                params.ReplyToAddresses = cleanReplyTo;
+            }
         }
 
         if (tags && tags.length > 0) {
             params.Tags = tags.map(tag => ({
-                Name: tag.name,
-                Value: tag.value
+                Name: String(tag.name).replace(/[^a-zA-Z0-9_-]/g, ''),
+                Value: String(tag.value).replace(/[^a-zA-Z0-9_:-]/g, '')
             }));
         }
 
@@ -63,12 +97,12 @@ class SESProvider {
         } catch (error) {
             console.error('[SESProvider] sendEmail error:', error.message);
 
-            // Handle AWS SES Sandbox / Unverified Domain mode during development
+            // Handle AWS SES Sandbox mode during dev / test
             const stage = process.env.STAGE || 'dev';
             if (stage === 'dev' || process.env.NODE_ENV !== 'production') {
-                if (error.code === 'MessageRejected' && error.message.includes('not verified')) {
-                    const recipientStr = Array.isArray(to) ? to.join(', ') : to;
-                    console.warn(`[SESProvider] DEV FALLBACK: AWS SES Sandbox blocked unverified email (${recipientStr}). Simulating successful dispatch.`);
+                if (error.code === 'MessageRejected' && error.message && error.message.includes('not verified')) {
+                    const recipientStr = cleanRecipients.join(', ');
+                    console.warn(`[SESProvider] DEV FALLBACK: AWS SES Sandbox blocked unverified email (${recipientStr}). Simulating delivery.`);
                     return {
                         success: true,
                         messageId: `dev-sandbox-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,

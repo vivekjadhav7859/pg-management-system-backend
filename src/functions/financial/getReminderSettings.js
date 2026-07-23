@@ -34,6 +34,7 @@ exports.handler = async (event) => {
             rentReminderEnabled: settings?.rentReminderEnabled ?? true,
             receiptEnabled: settings?.receiptEnabled ?? true,
             overdueEnabled: settings?.overdueEnabled ?? true,
+            complaintUpdatesEnabled: settings?.complaintUpdatesEnabled ?? true,
             provider: 'AWS_SES',
             providerStatus: 'ACTIVE',
             updatedAt: settings?.updatedAt || new Date().toISOString()

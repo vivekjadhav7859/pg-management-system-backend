@@ -1,18 +1,59 @@
 /**
- * NotificationService - Core orchestrator for GoBanqo notifications.
+ * NotificationService - Core enterprise orchestrator for GoBanqo notifications.
  * Decouples business modules from specific communication providers.
  */
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
 const SESProvider = require('../providers/email/sesProvider');
 const emailTemplates = require('../templates/emailTemplates');
+const { NOTIFICATION_EVENTS } = require('../constants/notificationEvents');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const EMAIL_LOG_TABLE = process.env.EMAIL_LOG_TABLE;
+const REMINDER_SETTINGS_TABLE = process.env.REMINDER_SETTINGS_TABLE;
 
 class NotificationService {
     constructor() {
         this.emailProvider = new SESProvider();
+    }
+
+    /**
+     * Check if notification type is enabled for a given property
+     */
+    async isEventEnabledForProperty(propertyId, type) {
+        if (!propertyId || !REMINDER_SETTINGS_TABLE) return true;
+        try {
+            const res = await dynamodb.get({
+                TableName: REMINDER_SETTINGS_TABLE,
+                Key: { propertyId }
+            }).promise();
+
+            if (!res.Item) return true;
+
+            const settings = res.Item;
+            if (settings.autoEnabled === false) return false;
+
+            if (type === NOTIFICATION_EVENTS.WELCOME || type === NOTIFICATION_EVENTS.TENANT_CREATED) {
+                return settings.welcomeEnabled !== false;
+            }
+            if (type === NOTIFICATION_EVENTS.RENT_REMINDER || type === NOTIFICATION_EVENTS.RENT_DUE) {
+                return settings.rentReminderEnabled !== false;
+            }
+            if (type === NOTIFICATION_EVENTS.RENT_OVERDUE || type === 'OVERDUE_REMINDER') {
+                return settings.overdueEnabled !== false;
+            }
+            if (type === NOTIFICATION_EVENTS.RECEIPT_GENERATED || type === NOTIFICATION_EVENTS.PAYMENT_RECEIVED || type === 'PAYMENT_RECEIPT') {
+                return settings.receiptEnabled !== false;
+            }
+            if (type === NOTIFICATION_EVENTS.COMPLAINT_CREATED || type === NOTIFICATION_EVENTS.COMPLAINT_UPDATED || type === 'TENANT_REQUEST_ALERT') {
+                return settings.complaintUpdatesEnabled !== false;
+            }
+
+            return true;
+        } catch (err) {
+            console.error('[NotificationService.isEventEnabledForProperty] Error reading settings:', err);
+            return true; // Default to allowing notification on error
+        }
     }
 
     /**
@@ -24,42 +65,121 @@ class NotificationService {
             return { sent: false, reason: 'Recipient email address missing' };
         }
 
+        // Verify property preferences if applicable
+        if (propertyId) {
+            const enabled = await this.isEventEnabledForProperty(propertyId, type);
+            if (!enabled) {
+                console.log(`[NotificationService] Notification type ${type} disabled by owner for property ${propertyId}`);
+                return { sent: false, reason: `Notification type ${type} disabled by property settings` };
+            }
+        }
+
         let templateResult;
         switch (type) {
-            case 'RENT_REMINDER':
-                templateResult = emailTemplates.getRentReminderTemplate(data);
+            // Auth
+            case NOTIFICATION_EVENTS.ACCOUNT_CREATED:
+                templateResult = emailTemplates.getAccountCreatedTemplate(data);
                 break;
-            case 'OVERDUE_REMINDER':
-                templateResult = emailTemplates.getOverdueReminderTemplate(data);
+            case NOTIFICATION_EVENTS.EMAIL_VERIFIED:
+                templateResult = emailTemplates.getEmailVerifiedTemplate(data);
                 break;
-            case 'PAYMENT_RECEIPT':
-                templateResult = emailTemplates.getPaymentReceiptTemplate(data);
+            case NOTIFICATION_EVENTS.LOGIN_OTP:
+                templateResult = emailTemplates.getLoginOtpTemplate(data);
                 break;
+            case NOTIFICATION_EVENTS.PASSWORD_RESET:
+                templateResult = emailTemplates.getPasswordResetTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.PASSWORD_CHANGED:
+                templateResult = emailTemplates.getPasswordChangedTemplate(data);
+                break;
+
+            // Tenant
+            case NOTIFICATION_EVENTS.TENANT_CREATED:
             case 'WELCOME':
                 templateResult = emailTemplates.getWelcomeTemplate(data);
                 break;
-            case 'TENANT_REQUEST_ALERT':
-                templateResult = emailTemplates.getTenantRequestAlertTemplate(data);
+            case NOTIFICATION_EVENTS.TENANT_ASSIGNED:
+            case NOTIFICATION_EVENTS.ROOM_ASSIGNED:
+                templateResult = emailTemplates.getTenantAssignedTemplate(data);
                 break;
+            case NOTIFICATION_EVENTS.TENANT_MOVED:
+            case NOTIFICATION_EVENTS.ROOM_CHANGED:
+                templateResult = emailTemplates.getTenantMovedTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.TENANT_CHECKOUT:
+                templateResult = emailTemplates.getTenantCheckoutTemplate(data);
+                break;
+
+            // Rent
+            case NOTIFICATION_EVENTS.RENT_REMINDER:
+                templateResult = emailTemplates.getRentReminderTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.RENT_DUE:
+                templateResult = emailTemplates.getRentDueTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.RENT_OVERDUE:
+            case 'OVERDUE_REMINDER':
+                templateResult = emailTemplates.getOverdueReminderTemplate(data);
+                break;
+
+            // Payment
+            case NOTIFICATION_EVENTS.PAYMENT_RECEIVED:
+            case NOTIFICATION_EVENTS.RECEIPT_GENERATED:
+            case 'PAYMENT_RECEIPT':
+                templateResult = emailTemplates.getPaymentReceiptTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.PAYMENT_FAILED:
+                templateResult = emailTemplates.getPaymentFailedTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.PAYMENT_PENDING:
+                templateResult = emailTemplates.getPaymentPendingTemplate(data);
+                break;
+
+            // Maintenance
+            case NOTIFICATION_EVENTS.COMPLAINT_CREATED:
+            case 'TENANT_REQUEST_ALERT':
+                templateResult = emailTemplates.getComplaintCreatedTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.COMPLAINT_UPDATED:
+                templateResult = emailTemplates.getComplaintUpdatedTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.COMPLAINT_RESOLVED:
+                templateResult = emailTemplates.getComplaintResolvedTemplate(data);
+                break;
+
+            // Subscription & Alerts
+            case NOTIFICATION_EVENTS.PLAN_CHANGED:
+                templateResult = emailTemplates.getPlanChangedTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.TRIAL_ENDING:
+                templateResult = emailTemplates.getTrialEndingTemplate(data);
+                break;
+            case NOTIFICATION_EVENTS.SYSTEM_ALERT:
             case 'BROADCAST':
                 templateResult = emailTemplates.getBroadcastTemplate(data);
                 break;
+            case 'OWNER_DAILY_SUMMARY':
+                templateResult = emailTemplates.getOwnerDailySummaryTemplate(data);
+                break;
+
             default:
                 return { sent: false, reason: `Unsupported notification type: ${type}` };
         }
 
         const { subject, html } = templateResult;
-        const senderDisplay = data.propertyName ? `"${data.propertyName} via GoBanqo" <noreply@gobanqo.com>` : null;
+        const senderDisplay = data.propertyName 
+            ? `"${data.propertyName} via GoBanqo" <noreply@gobanqo.com>` 
+            : null;
 
-        const result = await this.emailProvider.sendEmail({
+        const result = await this.emailProvider.send({
             to: targetEmail,
             from: senderDisplay,
             replyTo,
             subject,
             html,
             tags: [
-                { name: 'NotificationType', value: type },
-                { name: 'PropertyId', value: propertyId || 'default' }
+                { name: 'NotificationType', value: String(type) },
+                { name: 'PropertyId', value: String(propertyId || 'system') }
             ]
         });
 
@@ -140,8 +260,6 @@ class NotificationService {
     async updateLogStatus(messageId, status, details = null) {
         if (!EMAIL_LOG_TABLE || !messageId) return;
         try {
-            // Find item by messageId or query index if added
-            // For now, scan or query table for messageId
             const scanResult = await dynamodb.scan({
                 TableName: EMAIL_LOG_TABLE,
                 FilterExpression: 'messageId = :mid',
