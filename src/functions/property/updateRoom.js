@@ -32,7 +32,19 @@ exports.handler = async (event) => {
         const updates = {};
 
         if (body.roomNumber !== undefined) {
-            updates.roomNumber = sanitizeInput(body.roomNumber);
+            const newRoomNumber = sanitizeInput(body.roomNumber);
+            if (newRoomNumber !== room.roomNumber) {
+                const roomsData = await propertyService.getRoomsByProperty(room.propertyId, 500);
+                const isDuplicate = (roomsData.rooms || []).some(
+                    r => (r.roomId || r.id) !== roomId && 
+                         String(r.roomNumber || '').trim().toLowerCase() === newRoomNumber.trim().toLowerCase() && 
+                         r.status !== 'deleted'
+                );
+                if (isDuplicate) {
+                    return response.error(`Room number "${newRoomNumber}" already exists in this property`, 400);
+                }
+            }
+            updates.roomNumber = newRoomNumber;
         }
 
         if (body.roomType !== undefined) {
