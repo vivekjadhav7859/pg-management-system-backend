@@ -1,0 +1,20 @@
+const response = require('../../utils/response');
+
+/**
+ * GET /notifications/vapid-public-key
+ * Returns the public VAPID key for Web Push PWA subscriptions.
+ */
+exports.handler = async (event) => {
+    try {
+        response.setCorsOrigin(event);
+        const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+
+        return response.success({
+            vapidPublicKey,
+            configured: Boolean(vapidPublicKey)
+        });
+    } catch (err) {
+        console.error('[getVapidPublicKey] Error:', err);
+        return response.error('Failed to retrieve VAPID public key', 500);
+    }
+};

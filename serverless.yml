@@ -65,6 +65,10 @@ provider:
     PLAN_SILVER_ANNUAL_AMOUNT: ${env:PLAN_SILVER_ANNUAL_AMOUNT, '499900'}
     PLAN_GOLD_ANNUAL_AMOUNT: ${env:PLAN_GOLD_ANNUAL_AMOUNT, '799900'}
     PLAN_PLATINUM_ANNUAL_AMOUNT: ${env:PLAN_PLATINUM_ANNUAL_AMOUNT, '1199900'}
+    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, ''}
+    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, ''}
+    VAPID_SUBJECT: ${env:VAPID_SUBJECT, 'mailto:support@gobanqo.com'}
+
 
   logs:
     httpApi: true
@@ -1032,6 +1036,29 @@ functions:
           path: notifications/ses-events
           method: post
           cors: *corsConfig
+
+  getVapidPublicKey:
+    handler: src/functions/notifications/getVapidPublicKey.handler
+    events:
+      - http:
+          path: notifications/vapid-public-key
+          method: get
+          cors: *corsConfig
+
+  deletePushSubscription:
+    handler: src/functions/tenant/deletePushSubscription.handler
+    events:
+      - http:
+          path: tenant/push-subscription
+          method: delete
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+
 
   # ============ COMPLAINTS MANAGEMENT ============
   createComplaint:

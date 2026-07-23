@@ -243,6 +243,11 @@ class NotificationService {
             data
         });
 
+        // Prune expired endpoints automatically
+        if (result.expiredEndpoints && result.expiredEndpoints.length > 0 && tenantId) {
+            await this.pruneExpiredPushSubscriptions(tenantId, result.expiredEndpoints);
+        }
+
         const status = result.success ? 'SENT' : 'FAILED';
         const logId = uuidv4();
         await this.logNotification({
@@ -268,6 +273,90 @@ class NotificationService {
             expiredEndpoints: result.expiredEndpoints || []
         };
     }
+
+    /**
+     * Remove 410/404 expired push subscriptions from DynamoDB
+     */
+    async pruneExpiredPushSubscriptions(tenantId, expiredEndpoints) {
+        if (!tenantId || !expiredEndpoints || expiredEndpoints.length === 0) return;
+        const TENANT_TABLE = process.env.TENANT_TABLE;
+        if (!TENANT_TABLE) return;
+
+        try {
+            const tenantRes = await dynamodb.get({ TableName: TENANT_TABLE, Key: { tenantId } }).promise();
+            if (tenantRes.Item && tenantRes.Item.pushSubscriptions) {
+                const updatedSubs = tenantRes.Item.pushSubscriptions.filter(
+                    s => !expiredEndpoints.includes(s.endpoint)
+                );
+                await dynamodb.update({
+                    TableName: TENANT_TABLE,
+                    Key: { tenantId },
+                    UpdateExpression: 'SET pushSubscriptions = :subs, updatedAt = :uAt',
+                    ExpressionAttributeValues: {
+                        ':subs': updatedSubs,
+                        ':uAt': new Date().toISOString()
+                    }
+                }).promise();
+                console.log(`[NotificationService] Pruned ${expiredEndpoints.length} expired push endpoints for tenant ${tenantId}`);
+            }
+        } catch (err) {
+            console.error('[NotificationService.pruneExpiredPushSubscriptions] Error:', err.message);
+        }
+    }
+
+    /**
+     * Unified multi-channel dispatcher (Email + Push) driven by centralized business events and tenant preferences
+     */
+    async notifyTenantEvent({ type, ownerId, tenantId, propertyId, data = {}, idempotencyKeyPrefix = null }) {
+        const TENANT_TABLE = process.env.TENANT_TABLE;
+        let tenant = null;
+        if (tenantId && TENANT_TABLE) {
+            try {
+                const res = await dynamodb.get({ TableName: TENANT_TABLE, Key: { tenantId } }).promise();
+                tenant = res.Item || null;
+            } catch (_) {}
+        }
+
+        const results = { email: null, push: null };
+
+        // 1. Dispatch Email Notification
+        const targetEmail = data.tenantEmail || tenant?.email;
+        if (targetEmail && tenant?.notificationPreferences?.email !== false) {
+            results.email = await this.sendNotification({
+                type,
+                ownerId: ownerId || tenant?.ownerId || 'system',
+                tenantId,
+                tenantEmail: targetEmail,
+                propertyId: propertyId || tenant?.propertyId,
+                data: { ...data, tenantName: data.tenantName || tenant?.name },
+                idempotencyKey: idempotencyKeyPrefix ? `${idempotencyKeyPrefix}#EMAIL` : null
+            });
+        }
+
+        // 2. Dispatch PWA Web Push Notification
+        const pushSubs = tenant?.pushSubscriptions || data.pushSubscriptions;
+        if (pushSubs && Array.isArray(pushSubs) && pushSubs.length > 0 && tenant?.notificationPreferences?.push !== false) {
+            const pushTitle = data.pushTitle || data.title || `GoBanqo Notice - ${data.propertyName || 'Property'}`;
+            const pushBody = data.pushBody || data.body || `You have a new update regarding ${type}.`;
+            results.push = await this.sendPushNotification({
+                ownerId: ownerId || tenant?.ownerId || 'system',
+                tenantId,
+                propertyId: propertyId || tenant?.propertyId,
+                subscription: pushSubs,
+                title: pushTitle,
+                body: pushBody,
+                data: {
+                    url: data.url || '/tenant/dashboard',
+                    eventType: type,
+                    propertyId: propertyId || tenant?.propertyId
+                },
+                idempotencyKey: idempotencyKeyPrefix ? `${idempotencyKeyPrefix}#PUSH` : null
+            });
+        }
+
+        return results;
+    }
+
 
     /**
      * Check if an idempotency key was previously dispatched
