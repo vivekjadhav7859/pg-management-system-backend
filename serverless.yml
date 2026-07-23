@@ -23,6 +23,11 @@ custom:
   prune:
     automatic: true
     number: 3
+  splitStacks:
+    custom: splits.js
+
+plugins:
+  - serverless-plugin-split-stacks
 
 provider:
   name: aws
@@ -806,7 +811,7 @@ functions:
   # Also callable manually via POST /financial/generate-bills
   generateMonthlyBills:
     handler: src/functions/financial/generateMonthlyBills.handler
-    timeout: 60
+    timeout: 29
     events:
       - http:
           path: financial/generate-bills
@@ -1311,7 +1316,7 @@ functions:
 
   broadcastEmail:
     handler: src/functions/notifications/broadcastEmail.handler
-    timeout: 300
+    timeout: 29
     events:
       - http:
           path: notifications/broadcast
