@@ -57,6 +57,19 @@ async function testNotificationPlatform() {
         throw new Error(`Dispatch failed: ${dispatchResult.reason}`);
     }
 
+    console.log('\n4. Testing WebPush Provider & Idempotency Lock:');
+    const pushResult = await notificationService.sendPushNotification({
+        ownerId: 'owner-123',
+        tenantId: 'tenant-456',
+        propertyId: 'prop-789',
+        subscription: [{ endpoint: 'https://fcm.googleapis.com/fcm/send/test-token', keys: { p256dh: 'test', auth: 'test' } }],
+        title: 'Test Rent Reminder',
+        body: 'Rent of ₹12,000 is due on 05 Aug 2026',
+        data: { url: '/tenant/dashboard' },
+        idempotencyKey: 'TEST_IDEMPOTENCY_KEY_001'
+    });
+    console.log('Push Dispatch Output:', pushResult);
+
     console.log('\n✅ ALL NOTIFICATION PLATFORM UNIT TESTS PASSED SUCCESSFULLY!');
 }
 

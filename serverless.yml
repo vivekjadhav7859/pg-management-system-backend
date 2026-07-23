@@ -722,6 +722,20 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  savePushSubscription:
+    handler: src/functions/tenant/savePushSubscription.handler
+    events:
+      - http:
+          path: tenant/push-subscription
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   # ============ FINANCIAL MANAGEMENT - RENT COLLECTION ============
   collectRent:
     handler: src/functions/financial/collectRent.handler

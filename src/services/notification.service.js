@@ -5,6 +5,7 @@
 const AWS = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
 const SESProvider = require('../providers/email/sesProvider');
+const WebPushProvider = require('../providers/push/webPushProvider');
 const emailTemplates = require('../templates/emailTemplates');
 const { NOTIFICATION_EVENTS } = require('../constants/notificationEvents');
 
@@ -15,6 +16,7 @@ const REMINDER_SETTINGS_TABLE = process.env.REMINDER_SETTINGS_TABLE;
 class NotificationService {
     constructor() {
         this.emailProvider = new SESProvider();
+        this.pushProvider = new WebPushProvider();
     }
 
     /**
@@ -57,9 +59,9 @@ class NotificationService {
     }
 
     /**
-     * Dispatch notification by event type
+     * Dispatch email notification by event type
      */
-    async sendNotification({ type, ownerId, tenantId, tenantEmail, recipientEmail, replyTo, data = {}, propertyId }) {
+    async sendNotification({ type, ownerId, tenantId, tenantEmail, recipientEmail, replyTo, data = {}, propertyId, idempotencyKey = null }) {
         const targetEmail = tenantEmail || recipientEmail;
         if (!targetEmail) {
             return { sent: false, reason: 'Recipient email address missing' };
@@ -71,6 +73,15 @@ class NotificationService {
             if (!enabled) {
                 console.log(`[NotificationService] Notification type ${type} disabled by owner for property ${propertyId}`);
                 return { sent: false, reason: `Notification type ${type} disabled by property settings` };
+            }
+        }
+
+        // Idempotency check if key provided
+        if (idempotencyKey) {
+            const alreadySent = await this.isIdempotentKeyDispatched(idempotencyKey);
+            if (alreadySent) {
+                console.log(`[NotificationService] Idempotency key ${idempotencyKey} already dispatched. Skipping.`);
+                return { sent: true, skipped: true, reason: 'Idempotency lock active: Notification previously delivered' };
             }
         }
 
@@ -193,8 +204,10 @@ class NotificationService {
             tenantEmail: targetEmail,
             propertyId: propertyId || data.propertyId || '',
             type,
+            channel: 'email',
             subject,
             status,
+            idempotencyKey: idempotencyKey || null,
             messageId: result.messageId || null,
             errorMessage: result.error || null,
             sentAt: new Date().toISOString()
@@ -209,7 +222,78 @@ class NotificationService {
     }
 
     /**
-     * Store email log entry in DynamoDB
+     * Dispatch Web Push Notification
+     */
+    async sendPushNotification({ ownerId, tenantId, propertyId, subscription, title, body, data = {}, idempotencyKey = null }) {
+        if (!subscription) {
+            return { sent: false, reason: 'Push subscription required' };
+        }
+
+        if (idempotencyKey) {
+            const alreadySent = await this.isIdempotentKeyDispatched(idempotencyKey);
+            if (alreadySent) {
+                return { sent: true, skipped: true, reason: 'Idempotency lock active for Push' };
+            }
+        }
+
+        const result = await this.pushProvider.send({
+            subscription,
+            title,
+            body,
+            data
+        });
+
+        const status = result.success ? 'SENT' : 'FAILED';
+        const logId = uuidv4();
+        await this.logNotification({
+            logId,
+            ownerId: ownerId || 'system',
+            tenantId: tenantId || '',
+            tenantEmail: 'PWA_PUSH',
+            propertyId: propertyId || '',
+            type: data.eventType || 'PUSH_NOTIFICATION',
+            channel: 'push',
+            subject: title,
+            status,
+            idempotencyKey: idempotencyKey || null,
+            messageId: result.messageId || null,
+            errorMessage: result.error || null,
+            sentAt: new Date().toISOString()
+        });
+
+        return {
+            sent: result.success,
+            logId,
+            messageId: result.messageId,
+            expiredEndpoints: result.expiredEndpoints || []
+        };
+    }
+
+    /**
+     * Check if an idempotency key was previously dispatched
+     */
+    async isIdempotentKeyDispatched(idempotencyKey) {
+        if (!EMAIL_LOG_TABLE || !idempotencyKey) return false;
+        try {
+            const res = await dynamodb.scan({
+                TableName: EMAIL_LOG_TABLE,
+                FilterExpression: 'idempotencyKey = :ikey AND #st = :sent',
+                ExpressionAttributeNames: { '#st': 'status' },
+                ExpressionAttributeValues: {
+                    ':ikey': idempotencyKey,
+                    ':sent': 'SENT'
+                },
+                Limit: 1
+            }).promise();
+            return res.Items && res.Items.length > 0;
+        } catch (err) {
+            console.error('[NotificationService.isIdempotentKeyDispatched] Scan error:', err.message);
+            return false;
+        }
+    }
+
+    /**
+     * Store email/notification log entry in DynamoDB
      */
     async logNotification(logItem) {
         if (!EMAIL_LOG_TABLE) return;
@@ -218,6 +302,7 @@ class NotificationService {
                 TableName: EMAIL_LOG_TABLE,
                 Item: {
                     ...logItem,
+                    channel: logItem.channel || 'email',
                     ownerIdIndex: logItem.ownerId || 'system'
                 }
             }).promise();
