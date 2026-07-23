@@ -31,6 +31,36 @@ exports.handler = async (event) => {
             return response.error('This invitation link has been regenerated or revoked by the property owner', 410);
         }
 
+        const { notifyOwnerLinkExpired } = require('../../utils/expiredLinkAlert');
+
+        // Legacy code auto-heal: if expiresAt is missing, set to 90 days from now
+        if (!invite.expiresAt) {
+            const NinetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+            const newExpiry = new Date(Date.now() + NinetyDaysMs).toISOString();
+            invite.expiresAt = newExpiry;
+            dynamodb.update({
+                TableName: process.env.INVITE_CODE_TABLE,
+                Key: { propertyId: invite.propertyId },
+                UpdateExpression: 'SET expiresAt = :exp, status = :st, updatedAt = :ts',
+                ExpressionAttributeValues: {
+                    ':exp': newExpiry,
+                    ':st': 'active',
+                    ':ts': new Date().toISOString(),
+                },
+            }).promise().catch((e) => console.warn('[getPublicPropertyInvite] legacy code update warning:', e.message));
+        }
+
+        if (invite.expiresAt && new Date() > new Date(invite.expiresAt)) {
+            await notifyOwnerLinkExpired({
+                ownerId: invite.ownerId,
+                propertyId: invite.propertyId,
+                propertyName: invite.propertyName,
+                code: invite.code,
+                linkType: 'property_invite',
+            });
+            return response.error('This property invitation link has expired (valid for 3 months). The property owner has been notified.', 410);
+        }
+
         // 2. Query PROPERTY_TABLE for property details
         const propertyResult = await dynamodb.get({
             TableName: process.env.PROPERTY_TABLE,

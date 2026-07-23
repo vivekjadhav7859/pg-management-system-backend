@@ -48,6 +48,19 @@ exports.handler = async (event) => {
         }
 
         if (user.invitationExpiresAt && new Date() > new Date(user.invitationExpiresAt)) {
+            const { notifyOwnerLinkExpired } = require('../../utils/expiredLinkAlert');
+            const tenant = await tenantService.getTenantByUserId(id).catch(() => null);
+            const ownerId = tenant?.ownerId || user.linkedOwnerId;
+            if (ownerId) {
+                await notifyOwnerLinkExpired({
+                    ownerId,
+                    propertyId: tenant?.propertyId || '',
+                    propertyName: '',
+                    tenantName: user.name,
+                    tenantEmail: user.email,
+                    linkType: 'tenant_invitation',
+                });
+            }
             return response.error('Invitation token has expired. Please contact your property owner.', 410, { code: 'TOKEN_EXPIRED' });
         }
 

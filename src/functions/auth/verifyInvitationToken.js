@@ -42,16 +42,28 @@ exports.handler = async (event) => {
             return response.error('Invalid invitation token', 400);
         }
 
-        // Check expiration
-        if (user.invitationExpiresAt && new Date() > new Date(user.invitationExpiresAt)) {
-            return response.error('Invitation token has expired. Please ask your property owner for a new invitation.', 410, { code: 'TOKEN_EXPIRED' });
-        }
-
         // Fetch tenant details for context
         const tenant = await tenantService.getTenantByUserId(id);
         let property = null;
         if (tenant?.propertyId) {
             property = await propertyService.getPropertyById(tenant.propertyId);
+        }
+
+        // Check expiration
+        if (user.invitationExpiresAt && new Date() > new Date(user.invitationExpiresAt)) {
+            const { notifyOwnerLinkExpired } = require('../../utils/expiredLinkAlert');
+            const ownerId = property?.ownerId || user.linkedOwnerId;
+            if (ownerId) {
+                await notifyOwnerLinkExpired({
+                    ownerId,
+                    propertyId: tenant?.propertyId || '',
+                    propertyName: property?.propertyName || '',
+                    tenantName: user.name,
+                    tenantEmail: user.email,
+                    linkType: 'tenant_invitation',
+                });
+            }
+            return response.error('Invitation token has expired. Please ask your property owner for a new invitation.', 410, { code: 'TOKEN_EXPIRED' });
         }
 
         return response.success({

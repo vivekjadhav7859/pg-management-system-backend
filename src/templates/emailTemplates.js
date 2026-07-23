@@ -188,9 +188,11 @@ exports.getPasswordChangedTemplate = ({ name }) => {
 // TENANT MANAGEMENT & ONBOARDING TEMPLATES
 // ==========================================
 
-exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, roomNumber, bedNumber, rentAmount, activationUrl, expiresHours = 72 }) => {
+exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, roomNumber, bedNumber, rentAmount, activationUrl, expiresHours = 2160 }) => {
     const subject = `🎉 Activate Your Account — Welcome to ${propertyName} on GoBanqo`;
     const preheader = `You've been invited to ${propertyName} by ${ownerName}. Activate your account to set up your password and access your tenant dashboard.`;
+
+    const expireText = expiresHours >= 720 ? '3 months (90 days)' : `${expiresHours} hours`;
 
     const contentHtml = `
     <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 0;">Welcome, ${escapeHtml(tenantName || 'Tenant')}!</h2>
@@ -212,7 +214,7 @@ exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, ro
 
     <div style="background-color: #fffbeb; border: 1px solid #fef3c7; padding: 14px; border-radius: 6px; margin: 24px 0;">
       <p style="margin: 0; font-size: 13px; color: #92400e; text-align: center;">
-        ⏰ <strong>Security Notice:</strong> This single-use activation link will expire in <strong>${expiresHours} hours</strong>. GoBanqo will never email passwords.
+        ⏰ <strong>Security Notice:</strong> This single-use activation link will remain valid for <strong>${expireText}</strong>. GoBanqo will never email passwords.
       </p>
     </div>
     `;

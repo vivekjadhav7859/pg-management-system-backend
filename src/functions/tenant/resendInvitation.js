@@ -62,7 +62,7 @@ exports.handler = async (event) => {
         const timestamp = new Date().toISOString();
         const rawToken = generateInvitationToken();
         const tokenHash = hashToken(rawToken);
-        const tokenExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+        const tokenExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
         // Invalidate old token and write new token hash
         await dynamodb.update({
@@ -97,7 +97,7 @@ exports.handler = async (event) => {
                 bedNumber: tenant.bedNumber,
                 rentAmount: tenant.rentAmount,
                 activationUrl,
-                expiresHours: 72
+                expiresHours: 2160
             },
             idempotencyKey: `RESEND#${tenant.tenantId}#${timestamp}`
         });

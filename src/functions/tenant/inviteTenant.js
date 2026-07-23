@@ -133,8 +133,8 @@ exports.handler = async (event) => {
             // Generate secure 256-bit invitation token & SHA-256 hash
             rawToken = generateInvitationToken();
             tokenHash = hashToken(rawToken);
-            // 72 hours expiration
-            tokenExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+            // 90 days (3 months) expiration
+            tokenExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
         }
 
         const tenantItem = {
@@ -387,7 +387,7 @@ exports.handler = async (event) => {
                     bedNumber,
                     rentAmount: Number(rentAmount),
                     activationUrl,
-                    expiresHours: 72
+                    expiresHours: 2160
                 },
                 idempotencyKey: `INVITE#${tenantId}#${timestamp.slice(0, 10)}`
             });
