@@ -1271,6 +1271,20 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  bulkDeleteRequests:
+    handler: src/functions/requests/bulkDeleteRequests.handler
+    events:
+      - http:
+          path: requests/bulk-delete
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+
 
   # ============ EMAIL AUTOMATION ============
   scheduledRentReminder:

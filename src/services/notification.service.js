@@ -457,11 +457,24 @@ class NotificationService {
                         ':uAt': new Date().toISOString()
                     }
                 }).promise();
-            }
+    /**
+     * Delete notification / request by ID from NOTIFICATION_TABLE
+     */
+    async deleteNotification(id) {
+        const NOTIFICATION_TABLE = process.env.NOTIFICATION_TABLE;
+        if (!NOTIFICATION_TABLE || !id) return { deleted: false };
+        try {
+            await dynamodb.delete({
+                TableName: NOTIFICATION_TABLE,
+                Key: { id }
+            }).promise();
+            return { deleted: true, id };
         } catch (err) {
-            console.error('[NotificationService.updateLogStatus] Error:', err);
+            console.error('[NotificationService.deleteNotification] Error:', err);
+            throw err;
         }
     }
 }
 
 module.exports = new NotificationService();
+
