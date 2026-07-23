@@ -1182,6 +1182,30 @@ functions:
           method: post
           cors: *corsConfig
 
+  getPublicPropertyInvite:
+    handler: src/functions/property/getPublicPropertyInvite.handler
+    events:
+      - http:
+          path: invite-code/public/{code}
+          method: get
+          cors: *corsConfig
+
+  getPublicAvailableRooms:
+    handler: src/functions/property/getPublicAvailableRooms.handler
+    events:
+      - http:
+          path: invite-code/public/{code}/rooms
+          method: get
+          cors: *corsConfig
+
+  submitPublicJoinRequest:
+    handler: src/functions/property/submitPublicJoinRequest.handler
+    events:
+      - http:
+          path: invite-code/public/{code}/submit
+          method: post
+          cors: *corsConfig
+
   linkTenantProperty:
     handler: src/functions/tenant/linkTenantProperty.handler
     events:
@@ -1233,6 +1257,20 @@ functions:
             resultTtlInSeconds: 0
             identitySource: method.request.header.Authorization
             type: token
+
+  bulkApproveRequests:
+    handler: src/functions/requests/bulkApproveRequests.handler
+    events:
+      - http:
+          path: requests/bulk-approve
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
 
   # ============ EMAIL AUTOMATION ============
   scheduledRentReminder:
