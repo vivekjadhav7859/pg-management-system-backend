@@ -36,4 +36,22 @@ exports.decryptSecret = async (cipherText) => {
 
     const result = await kmsClient.send(command);
     return Buffer.from(result.Plaintext).toString('utf8');
+/**
+ * Generates a 256-bit cryptographically secure random token hex string.
+ * @returns {string} 64-character hex string
+ */
+exports.generateInvitationToken = () => {
+    const crypto = require('crypto');
+    return crypto.randomBytes(32).toString('hex');
 };
+
+/**
+ * Computes SHA-256 hash digest of a raw token.
+ * @param {string} rawToken 
+ * @returns {string} SHA-256 hex digest
+ */
+exports.hashToken = (rawToken) => {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(String(rawToken)).digest('hex');
+};
+

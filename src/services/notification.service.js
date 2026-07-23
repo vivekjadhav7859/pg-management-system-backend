@@ -105,10 +105,14 @@ class NotificationService {
                 break;
 
             // Tenant
+            case NOTIFICATION_EVENTS.TENANT_INVITATION:
+                templateResult = emailTemplates.getTenantInvitationTemplate(data);
+                break;
             case NOTIFICATION_EVENTS.TENANT_CREATED:
             case 'WELCOME':
                 templateResult = emailTemplates.getWelcomeTemplate(data);
                 break;
+
             case NOTIFICATION_EVENTS.TENANT_ASSIGNED:
             case NOTIFICATION_EVENTS.ROOM_ASSIGNED:
                 templateResult = emailTemplates.getTenantAssignedTemplate(data);

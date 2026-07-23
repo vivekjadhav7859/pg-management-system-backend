@@ -80,6 +80,66 @@ exports.createUser = async (email, password, userAttributes = {}) => {
 };
 
 /**
+ * Create a user in Cognito for invitation flow (unconfirmed, email_verified: false, suppressed welcome email)
+ */
+exports.createInvitedUser = async (email, userAttributes = {}) => {
+    try {
+        const crypto = require('crypto');
+        const tempPassword = `Inv!te_${crypto.randomBytes(8).toString('hex')}A1!`;
+        const params = {
+            UserPoolId: USER_POOL_ID,
+            Username: email,
+            TemporaryPassword: tempPassword,
+            UserAttributes: [
+                { Name: 'email', Value: email },
+                { Name: 'email_verified', Value: 'false' }
+            ],
+            MessageAction: 'SUPPRESS'
+        };
+
+        if (userAttributes.name) {
+            params.UserAttributes.push({ Name: 'name', Value: userAttributes.name });
+        }
+        if (userAttributes.phone_number) {
+            params.UserAttributes.push({ Name: 'phone_number', Value: userAttributes.phone_number });
+        }
+
+        const response = await cognito.adminCreateUser(params).promise();
+        return {
+            userId: response.User.Username,
+            email: email,
+            userAttributes: response.User.Attributes
+        };
+    } catch (error) {
+        console.error('Error creating invited user in Cognito:', error);
+        if (error.code === 'UsernameExistsException') {
+            const usernameExistsError = new Error('User with this email already exists');
+            usernameExistsError.code = error.code;
+            throw usernameExistsError;
+        }
+        throw error;
+    }
+};
+
+/**
+ * Update user attributes in Cognito (e.g. set email_verified to true)
+ */
+exports.updateUserAttributes = async (email, attributes = []) => {
+    try {
+        const params = {
+            UserPoolId: USER_POOL_ID,
+            Username: email,
+            UserAttributes: attributes
+        };
+        await cognito.adminUpdateUserAttributes(params).promise();
+    } catch (error) {
+        console.error('Error updating user attributes in Cognito:', error);
+        throw error;
+    }
+};
+
+
+/**
  * Login user and return authentication tokens
  */
 exports.loginUser = async (email, password) => {

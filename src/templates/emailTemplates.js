@@ -88,7 +88,65 @@ exports.getPasswordChangedTemplate = ({ name }) => {
 // TENANT MANAGEMENT TEMPLATES
 // ==========================================
 
+exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, roomNumber, bedNumber, rentAmount, activationUrl, expiresHours = 72 }) => {
+    const subject = `🎉 Activate Your Account — Welcome to ${propertyName} on GoBanqo`;
+    const preheader = `You've been invited to ${propertyName} by ${ownerName}. Activate your account to set up your password and access your tenant dashboard.`;
+
+    const contentHtml = `
+    <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 0;">Welcome, ${escapeHtml(tenantName || 'Tenant')}!</h2>
+    <p style="font-size: 15px; color: #334155; line-height: 1.6;">
+        <strong>${escapeHtml(ownerName || 'Your Property Owner')}</strong> has invited you to join <strong>${escapeHtml(propertyName)}</strong> on GoBanqo.
+    </p>
+    
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; padding: 20px; border-radius: 8px; margin: 24px 0;">
+      <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: #0f172a;">Tenancy Overview</h3>
+      <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Property:</strong> ${escapeHtml(propertyName)}</p>
+      ${roomNumber ? `<p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Room:</strong> ${escapeHtml(roomNumber)} ${bedNumber ? `(Bed ${escapeHtml(bedNumber)})` : ''}</p>` : ''}
+      ${rentAmount ? `<p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Monthly Rent:</strong> ${formatCurrency(rentAmount)}</p>` : ''}
+      <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Owner / Manager:</strong> ${escapeHtml(ownerName)}</p>
+    </div>
+
+    <p style="font-size: 15px; color: #334155; line-height: 1.6;">
+        To activate your account, verify your email, and create your password, click the button below:
+    </p>
+
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="${escapeHtml(activationUrl)}" target="_blank" style="background-color: #4f46e5; color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
+        Activate Your Account
+      </a>
+    </div>
+
+    <p style="font-size: 13px; color: #64748b; line-height: 1.5; text-align: center;">
+        Or copy and paste this link in your browser:<br/>
+        <a href="${escapeHtml(activationUrl)}" style="color: #4f46e5; word-break: break-all;">${escapeHtml(activationUrl)}</a>
+    </p>
+
+    <div style="background-color: #fffbeb; border: 1px solid #fef3c7; padding: 14px; border-radius: 6px; margin: 24px 0;">
+      <p style="margin: 0; font-size: 13px; color: #92400e; text-align: center;">
+        ⏰ <strong>Note:</strong> This activation link will expire in <strong>${expiresHours} hours</strong>. If it expires, ask your property owner to resend the invitation.
+      </p>
+    </div>
+
+    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">
+        Security Notice: GoBanqo will never ask for your password via email. If you did not expect this invitation, you can safely ignore this message.
+    </p>
+    `;
+
+    return {
+        subject,
+        html: renderLayout({
+            title: subject,
+            preheader,
+            contentHtml,
+            actionUrl: activationUrl,
+            actionText: 'Activate Your Account',
+            footerText: `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo Identity Platform`
+        })
+    };
+};
+
 exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({ tenantName, ownerName, propertyName, roomNumber, ownerContact, rentAmount, rentDueDay, leaseEndDate, rules }) => {
+
     const subject = `🎉 Welcome to ${propertyName} — GoBanqo`;
     const preheader = `Welcome aboard to ${propertyName}! Here are your tenancy details.`;
 

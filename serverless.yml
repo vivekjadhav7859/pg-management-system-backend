@@ -273,6 +273,23 @@ functions:
           method: get
           cors: *corsConfig
 
+  verifyInvitationToken:
+    handler: src/functions/auth/verifyInvitationToken.handler
+    events:
+      - http:
+          path: auth/verify-invitation
+          method: get
+          cors: *corsConfig
+
+  activateAccount:
+    handler: src/functions/auth/activateAccount.handler
+    events:
+      - http:
+          path: auth/activate-account
+          method: post
+          cors: *corsConfig
+
+
   getProfile:
     handler: src/functions/auth/getProfile.handler
     events:
@@ -565,8 +582,22 @@ functions:
             type: token
 
   # ============ TENANT MANAGEMENT ENDPOINTS ============
+  inviteTenant:
+    handler: src/functions/tenant/inviteTenant.handler
+    events:
+      - http:
+          path: tenants/invite
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   checkInTenant:
-    handler: src/functions/tenant/checkInTenant.handler
+    handler: src/functions/tenant/inviteTenant.handler
     events:
       - http:
           path: tenants/check-in
@@ -578,6 +609,21 @@ functions:
             resultTtlInSeconds: 0
             identitySource: method.request.header.Authorization
             type: token
+
+  resendInvitation:
+    handler: src/functions/tenant/resendInvitation.handler
+    events:
+      - http:
+          path: tenants/resend-invitation
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
       
   getTenants:
     handler: src/functions/tenant/getTenants.handler
