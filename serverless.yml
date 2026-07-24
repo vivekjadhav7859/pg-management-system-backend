@@ -63,6 +63,9 @@ provider:
     INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
     EMAIL_LOG_TABLE: ${self:service}-email-logs-${self:provider.stage}
     POLICY_ACCEPTANCE_LOG_TABLE: ${self:service}-policy-logs-${self:provider.stage}
+    AUDIT_LOG_TABLE: ${self:service}-audit-logs-${self:provider.stage}
+    USER_CONSENT_TABLE: ${self:service}-user-consents-${self:provider.stage}
+    DATA_REQUEST_TABLE: ${self:service}-data-requests-${self:provider.stage}
     SUBSCRIPTION_TABLE: ${self:service}-subscriptions-${self:provider.stage}
     WEBHOOK_EVENT_TABLE: ${self:service}-webhook-events-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
@@ -141,6 +144,12 @@ provider:
             - !Sub "${EmailLogsTable.Arn}/index/*"
             - !GetAtt PolicyAcceptanceLogsTable.Arn
             - !Sub "${PolicyAcceptanceLogsTable.Arn}/index/*"
+            - !GetAtt AuditLogsTable.Arn
+            - !Sub "${AuditLogsTable.Arn}/index/*"
+            - !GetAtt UserConsentsTable.Arn
+            - !Sub "${UserConsentsTable.Arn}/index/*"
+            - !GetAtt DataRequestsTable.Arn
+            - !Sub "${DataRequestsTable.Arn}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}"
@@ -349,6 +358,72 @@ functions:
           method: put
           cors: *corsConfig
 
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ PRIVACY & SECURITY ENDPOINTS ============
+  getConsent:
+    handler: src/functions/privacy/getConsent.handler
+    events:
+      - http:
+          path: privacy/consent
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateConsent:
+    handler: src/functions/privacy/updateConsent.handler
+    events:
+      - http:
+          path: privacy/consent
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  exportData:
+    handler: src/functions/privacy/exportData.handler
+    events:
+      - http:
+          path: privacy/export-data
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  requestErasure:
+    handler: src/functions/privacy/requestErasure.handler
+    events:
+      - http:
+          path: privacy/request-erasure
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getAuditLogs:
+    handler: src/functions/security/getAuditLogs.handler
+    events:
+      - http:
+          path: security/audit-logs
+          method: get
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -2005,6 +2080,95 @@ resources:
             KeySchema:
               - AttributeName: userId
                 KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Central Security Audit Logs Table
+    AuditLogsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-audit-logs-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: auditId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: timestamp
+            AttributeType: S
+        KeySchema:
+          - AttributeName: auditId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdTimestampIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: timestamp
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # User Consents and Communication Preferences Table
+    UserConsentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-user-consents-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Data Export and Erasure Requests Table (DPDP Compliance)
+    DataRequestsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-data-requests-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: requestId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: requestId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdStatusIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
             Projection:
               ProjectionType: ALL
         PointInTimeRecoverySpecification:
