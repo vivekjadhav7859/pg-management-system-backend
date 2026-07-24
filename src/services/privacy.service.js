@@ -69,10 +69,21 @@ exports.updateUserConsent = async (userId, consentData, ipAddress = 'UNKNOWN') =
  */
 exports.generateUserDataExport = async (userId) => {
     try {
-        const [userResult, tenantResult] = await Promise.all([
+        const POLICY_ACCEPTANCE_LOG_TABLE = process.env.POLICY_ACCEPTANCE_LOG_TABLE;
+        const [userResult, tenantResult, consentResult, policyLogsResult] = await Promise.all([
             dynamodb.get({ TableName: USER_TABLE, Key: { userId } }).promise(),
             TENANT_TABLE ? dynamodb.query({
                 TableName: TENANT_TABLE,
+                IndexName: 'UserIdIndex',
+                KeyConditionExpression: 'userId = :uid',
+                ExpressionAttributeValues: { ':uid': userId }
+            }).promise().catch(() => ({ Items: [] })) : Promise.resolve({ Items: [] }),
+            USER_CONSENT_TABLE ? dynamodb.get({
+                TableName: USER_CONSENT_TABLE,
+                Key: { userId }
+            }).promise().catch(() => ({ Item: null })) : Promise.resolve({ Item: null }),
+            POLICY_ACCEPTANCE_LOG_TABLE ? dynamodb.query({
+                TableName: POLICY_ACCEPTANCE_LOG_TABLE,
                 IndexName: 'UserIdIndex',
                 KeyConditionExpression: 'userId = :uid',
                 ExpressionAttributeValues: { ':uid': userId }
@@ -81,15 +92,17 @@ exports.generateUserDataExport = async (userId) => {
 
         const userData = userResult.Item || {};
         
-        // Remove internal system attributes from export if any
+        // Remove internal system attributes from export
         delete userData.cognitoUserId;
 
         return {
             exportTimestamp: new Date().toISOString(),
             platform: 'GoBanqo PG & Property Management SaaS',
-            dpdpNotice: 'This document contains a complete export of your personal data processed by GoBanqo.',
+            dpdpNotice: 'This document contains a complete export of your personal data processed by GoBanqo under the Digital Personal Data Protection Act 2023.',
             userProfile: userData,
-            tenantRecord: tenantResult.Items ? tenantResult.Items[0] : null
+            tenantRecord: tenantResult.Items ? tenantResult.Items[0] : null,
+            privacyPreferences: consentResult?.Item || null,
+            policyAcceptanceHistory: policyLogsResult?.Items || []
         };
     } catch (error) {
         console.error('Error generating user data export:', error);

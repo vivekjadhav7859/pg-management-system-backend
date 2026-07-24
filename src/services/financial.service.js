@@ -37,12 +37,18 @@ exports.createRentPayment = async (paymentData) => {
             transactionId: paymentData.transactionId || null,
             transactionRef: paymentData.transactionRef || null,
             
-            // Additional Info
-            receiptNumber: paymentData.receiptNumber || null,
+            // Additional Info & GST Compliance Readiness
+            receiptNumber: paymentData.receiptNumber || `INV-${Date.now().toString().slice(-8)}`,
+            sacCode: paymentData.sacCode || '997212', // Services provided by hostels/PG accommodation
+            gstin: paymentData.gstin || null,
+            taxableAmount: paymentData.taxableAmount || paymentData.amount,
+            cgstAmount: paymentData.cgstAmount || 0,
+            sgstAmount: paymentData.sgstAmount || 0,
+            igstAmount: paymentData.igstAmount || 0,
             notes: paymentData.notes || null,
             lateFee: paymentData.lateFee || 0,
             discount: paymentData.discount || 0,
-            finalAmount: paymentData.amount + (paymentData.lateFee || 0) - (paymentData.discount || 0),
+            finalAmount: paymentData.amount + (paymentData.lateFee || 0) - (paymentData.discount || 0) + (paymentData.cgstAmount || 0) + (paymentData.sgstAmount || 0) + (paymentData.igstAmount || 0),
             
             // Metadata
             createdAt: timestamp,
