@@ -1,12 +1,14 @@
 /**
  * Custom stack splitting rules for serverless-plugin-split-stacks.
  * Groups HTTP Lambda functions together with their LogGroups, Permissions,
- * and ApiGateway Methods into 5 nested application stacks (AppStack0..4).
+ * and ApiGateway Methods into 4 domain-based nested application stacks (AppStack0..3).
  * 
- * Keep ApiGateway Resources in Root to avoid parent-child cross-nested-stack cycles.
- * Keep non-HTTP / root-triggered functions (Cognito triggers, Event Rules, Event Source Mappings)
- * in Root to avoid Root <-> Nested Stack circular dependency loops.
- * Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS in root.
+ * AppStack0: Auth & Admin
+ * AppStack1: Property & Room Management
+ * AppStack2: Tenant, Booking, Agreement, Requests & Complaints
+ * AppStack3: Financial, Subscriptions, Search & Notifications
+ * 
+ * Keep ApiGateway Resources, Custom Resources, Event Rules, and Root Functions in Root.
  */
 
 // List of Lambda functions triggered by Root-level resources (Cognito, Event Rules, DynamoDB Streams)
@@ -17,6 +19,59 @@ const rootFunctions = new Set([
   'ontenantcreated',
   'scheduledrentreminder'
 ]);
+
+function ejectFromNestedStack(context, logicalId) {
+  if (context && context.plugin && context.plugin.resourceMigrations && context.plugin.resourceMigrations[logicalId]) {
+    const migration = context.plugin.resourceMigrations[logicalId];
+    if (migration.stack && migration.stack.Resources) {
+      delete migration.stack.Resources[logicalId];
+    }
+    delete context.plugin.resourceMigrations[logicalId];
+  }
+}
+
+function getFeatureBucket(fnName) {
+  const name = fnName.toLowerCase();
+  // Auth & Admin -> AppStack0
+  if (
+    name.includes('signup') ||
+    name.includes('login') ||
+    name.includes('refresh') ||
+    name.includes('logout') ||
+    name.includes('password') ||
+    name.includes('verify') ||
+    name.includes('profile') ||
+    name.includes('admin') ||
+    name.includes('activate')
+  ) {
+    return 0;
+  }
+  // Property & Room & Upload & Invite -> AppStack1
+  if (
+    name.includes('property') ||
+    name.includes('properties') ||
+    name.includes('room') ||
+    name.includes('rooms') ||
+    name.includes('image') ||
+    name.includes('invitecode') ||
+    name.includes('public')
+  ) {
+    return 1;
+  }
+  // Tenant & Request & Complaint -> AppStack2
+  if (
+    name.includes('tenant') ||
+    name.includes('kyc') ||
+    name.includes('booking') ||
+    name.includes('agreement') ||
+    name.includes('request') ||
+    name.includes('complaint')
+  ) {
+    return 2;
+  }
+  // Financial & Subscription & Notification & Search -> AppStack3
+  return 3;
+}
 
 module.exports = function (resource, logicalId) {
   // Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS, and Custom Resources in root
@@ -29,11 +84,13 @@ module.exports = function (resource, logicalId) {
     logicalId.startsWith('CustomResource') ||
     logicalId.startsWith('CustomDashresource')
   ) {
+    ejectFromNestedStack(this, logicalId);
     return false;
   }
 
   // Keep ApiGateway Resources in Root to prevent cross-stack parent-child dependency loops
   if (resource.Type === 'AWS::ApiGateway::Resource') {
+    ejectFromNestedStack(this, logicalId);
     return false;
   }
 
@@ -43,6 +100,7 @@ module.exports = function (resource, logicalId) {
     resource.Type === 'AWS::Lambda::EventSourceMapping' ||
     resource.Type.startsWith('Custom::')
   ) {
+    ejectFromNestedStack(this, logicalId);
     return false;
   }
 
@@ -77,14 +135,11 @@ module.exports = function (resource, logicalId) {
   if (fnName) {
     // Keep non-HTTP / root-triggered functions & custom resource lambdas in Root to prevent Root <-> AppStack cycles
     if (rootFunctions.has(fnName.toLowerCase()) || fnName.toLowerCase().includes('custom')) {
+      ejectFromNestedStack(this, logicalId);
       return false;
     }
 
-    let hash = 0;
-    for (let i = 0; i < fnName.length; i++) {
-      hash = (hash * 31 + fnName.charCodeAt(i)) >>> 0;
-    }
-    const bucket = hash % 5;
+    const bucket = getFeatureBucket(fnName);
     return { destination: `AppStack${bucket}`, force: true };
   }
 
@@ -101,12 +156,17 @@ module.exports = function (resource, logicalId) {
     for (let i = 0; i < logicalId.length; i++) {
       hash = (hash * 31 + logicalId.charCodeAt(i)) >>> 0;
     }
-    const bucket = hash % 5;
+    const bucket = hash % 4;
     return { destination: `AppStack${bucket}`, force: true };
   }
 
+  ejectFromNestedStack(this, logicalId);
   return false;
 };
+
+
+
+
 
 
 
