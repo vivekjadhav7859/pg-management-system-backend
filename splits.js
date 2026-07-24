@@ -3,10 +3,10 @@
  * Groups HTTP Lambda functions, LogGroups, Permissions, ApiGateway Resources,
  * and ApiGateway Methods into 4 domain-isolated nested application stacks (AppStack0..3).
  * 
- * AppStack0: Auth & Admin
- * AppStack1: Property, Room, Public Invites & Image Uploads
- * AppStack2: Tenant, Booking, Agreement, Requests & Complaints
- * AppStack3: Financial, Subscriptions, Search & Notifications
+ * AppStack0: Auth & Admin (/auth/*, /admin/*)
+ * AppStack1: Property, Room, Public Invites & Image Uploads (/properties/*, /rooms/*, /invite-code/*, /upload/*)
+ * AppStack2: Tenant, Booking, Agreement, Requests & Complaints (/tenants/*, /tenant/*, /requests/*, /complaints/*, /kyc/*, /booking/*, /agreement/*)
+ * AppStack3: Financial, Subscriptions, Search & Notifications (/subscriptions/*, /rent/*, /expenses/*, /notifications/*, /search/*, /financial/*)
  * 
  * Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS, Custom Resources,
  * and pure non-HTTP background functions in Root.
@@ -34,49 +34,38 @@ function ejectFromNestedStack(context, logicalId) {
 function getDomainBucket(logicalId) {
   const name = logicalId.toLowerCase();
   
-  // Auth & Admin -> AppStack0
-  if (
-    name.includes('signup') ||
-    name.includes('login') ||
-    name.includes('refresh') ||
-    name.includes('logout') ||
-    name.includes('password') ||
-    name.includes('verify') ||
-    name.includes('profile') ||
-    name.includes('admin') ||
-    name.includes('activate') ||
-    name.includes('auth')
-  ) {
+  // 1. Auth & Admin -> AppStack0
+  if (name.includes('auth') || name.includes('admin')) {
     return 0;
   }
-
-  // Tenant & Request & Complaint & Booking & Agreement & KYC -> AppStack2
+  
+  // 2. Tenants, Tenant, Requests, Complaints, KYC, Booking, Agreement -> AppStack2
   if (
+    name.includes('tenants') ||
     name.includes('tenant') ||
+    name.includes('requests') ||
+    name.includes('request') ||
+    name.includes('complaint') ||
     name.includes('kyc') ||
     name.includes('booking') ||
-    name.includes('agreement') ||
-    name.includes('request') ||
-    name.includes('complaint')
+    name.includes('agreement')
   ) {
     return 2;
   }
 
-  // Property & Room & Upload & Invite -> AppStack1
+  // 3. Property, Rooms, Upload, Invite-code -> AppStack1
   if (
-    name.includes('property') ||
     name.includes('properties') ||
-    name.includes('room') ||
+    name.includes('property') ||
     name.includes('rooms') ||
-    name.includes('image') ||
+    name.includes('room') ||
     name.includes('upload') ||
-    name.includes('invite') ||
-    name.includes('public')
+    name.includes('invite')
   ) {
     return 1;
   }
-
-  // Financial & Subscription & Notification & Search -> AppStack3
+  
+  // 4. Financial, Subscriptions, Notifications, Search -> AppStack3
   return 3;
 }
 
@@ -95,9 +84,34 @@ module.exports = function (resource, logicalId) {
     return false;
   }
 
-  // Keep Root-level triggers/custom resources in Root
+  // Extract baseName for function / resource matching
+  let baseName = logicalId
+    .replace(/^ApiGatewayResource/, '')
+    .replace(/^ApiGatewayMethod/, '')
+    .replace(/LogGroup$/, '')
+    .replace(/LambdaFunction$/, '')
+    .replace(/LambdaPermission.*$/, '')
+    .replace(/EventsRuleSchedule.*$/, '')
+    .replace(/EventSourceMapping.*$/, '')
+    .replace(/Options$/, '')
+    .replace(/Post$/, '')
+    .replace(/Get$/, '')
+    .replace(/Put$/, '')
+    .replace(/Delete$/, '');
+
+  const lowerBase = baseName.toLowerCase();
+  const lowerLogical = logicalId.toLowerCase();
+
+  // Keep Root-level triggered functions and their associated resources (EventsRules, EventSourceMappings) in Root
   if (
-    resource.Type === 'AWS::Events::Rule' ||
+    rootFunctions.has(lowerBase) ||
+    rootFunctions.has(lowerLogical) ||
+    lowerBase.includes('cognitopresignup') ||
+    lowerBase.includes('cognitocustommessage') ||
+    lowerBase.includes('ontenantcreated') ||
+    lowerBase.includes('scheduledrentreminder') ||
+    lowerBase.includes('generatemonthlybills') ||
+    lowerLogical.includes('cognito') ||
     resource.Type === 'AWS::Lambda::EventSourceMapping' ||
     resource.Type.startsWith('Custom::')
   ) {
@@ -105,57 +119,17 @@ module.exports = function (resource, logicalId) {
     return false;
   }
 
-  // Extract function name associated with this resource if available
-  let fnName = null;
-
-  if (logicalId.endsWith('LambdaFunction')) {
-    fnName = logicalId.replace(/LambdaFunction$/, '');
-  } else if (logicalId.endsWith('LogGroup')) {
-    fnName = logicalId.replace(/LogGroup$/, '');
-  } else if (resource.Type === 'AWS::Lambda::Permission') {
-    if (resource.Properties && resource.Properties.FunctionName) {
-      const fn = resource.Properties.FunctionName;
-      if (fn.Ref) {
-        fnName = fn.Ref.replace(/LambdaFunction$/, '');
-      } else if (fn['Fn::GetAtt'] && Array.isArray(fn['Fn::GetAtt'])) {
-        fnName = fn['Fn::GetAtt'][0].replace(/LambdaFunction$/, '');
-      }
-    }
-  } else if (resource.Type === 'AWS::ApiGateway::Method') {
-    const integration = resource.Properties && resource.Properties.Integration;
-    if (integration && integration.Uri) {
-      const uriStr = JSON.stringify(integration.Uri);
-      const match = uriStr.match(/([A-Za-z0-9]+LambdaFunction)/);
-      if (match) {
-        fnName = match[1].replace(/LambdaFunction$/, '');
-      }
-    }
-  }
-
-  // If matched to a Lambda function:
-  if (fnName) {
-    // Keep non-HTTP / root-triggered functions in Root to prevent Root <-> AppStack cycles
-    if (rootFunctions.has(fnName.toLowerCase()) || fnName.toLowerCase().includes('custom')) {
-      ejectFromNestedStack(this, logicalId);
-      return false;
-    }
-
-    const bucket = getDomainBucket(fnName);
-    return { destination: `AppStack${bucket}`, force: true };
-  }
-
-  // For ApiGateway Resources, LogGroups, Permissions, or Methods:
-  // Distribute into 4 domain-isolated AppStack buckets based on logicalId matching
   const type = resource.Type;
   if (
     type === 'AWS::Logs::LogGroup' ||
     type === 'AWS::Lambda::Function' ||
     type === 'AWS::Lambda::Permission' ||
     type === 'AWS::ApiGateway::Resource' ||
-    type === 'AWS::ApiGateway::Method'
+    type === 'AWS::ApiGateway::Method' ||
+    type === 'AWS::Events::Rule'
   ) {
     const bucket = getDomainBucket(logicalId);
-    return { destination: `AppStack${bucket}`, force: true };
+    return { destination: `AppStack${bucket}` };
   }
 
   ejectFromNestedStack(this, logicalId);
