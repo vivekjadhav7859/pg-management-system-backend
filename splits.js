@@ -1,11 +1,15 @@
 /**
  * Custom stack splitting rules for serverless-plugin-split-stacks.
- * Groups Lambda functions and their dependent resources (LogGroups, Permissions,
- * ApiGateway Resources, and ApiGateway Methods) into 5 nested application stacks (AppStack0..4).
+ * Groups HTTP Lambda functions, LogGroups, Permissions, ApiGateway Resources,
+ * and ApiGateway Methods into 4 domain-isolated nested application stacks (AppStack0..3).
  * 
- * Preserves CloudFormation compatibility for existing API Gateway resources in deployed stages,
- * while keeping Root-level triggers (Cognito, Event Rules, DynamoDB Streams), Authorizers, RestApi,
- * IAM Roles, DynamoDB, Cognito, S3, and KMS in Root.
+ * AppStack0: Auth & Admin
+ * AppStack1: Property, Room, Public Invites & Image Uploads
+ * AppStack2: Tenant, Booking, Agreement, Requests & Complaints
+ * AppStack3: Financial, Subscriptions, Search & Notifications
+ * 
+ * Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS, Custom Resources,
+ * and pure non-HTTP background functions in Root.
  */
 
 // List of Lambda functions triggered by Root-level resources (Cognito, Event Rules, DynamoDB Streams)
@@ -26,8 +30,9 @@ function ejectFromNestedStack(context, logicalId) {
   }
 }
 
-function getFeatureBucket(fnName) {
-  const name = fnName.toLowerCase();
+function getDomainBucket(logicalId) {
+  const name = logicalId.toLowerCase();
+  
   // Auth & Admin -> AppStack0
   if (
     name.includes('signup') ||
@@ -38,23 +43,13 @@ function getFeatureBucket(fnName) {
     name.includes('verify') ||
     name.includes('profile') ||
     name.includes('admin') ||
-    name.includes('activate')
+    name.includes('activate') ||
+    name.includes('auth')
   ) {
     return 0;
   }
-  // Property & Room & Upload & Invite -> AppStack1
-  if (
-    name.includes('property') ||
-    name.includes('properties') ||
-    name.includes('room') ||
-    name.includes('rooms') ||
-    name.includes('image') ||
-    name.includes('invitecode') ||
-    name.includes('public')
-  ) {
-    return 1;
-  }
-  // Tenant & Request & Complaint -> AppStack2
+
+  // Tenant & Request & Complaint & Booking & Agreement & KYC -> AppStack2
   if (
     name.includes('tenant') ||
     name.includes('kyc') ||
@@ -65,6 +60,21 @@ function getFeatureBucket(fnName) {
   ) {
     return 2;
   }
+
+  // Property & Room & Upload & Invite -> AppStack1
+  if (
+    name.includes('property') ||
+    name.includes('properties') ||
+    name.includes('room') ||
+    name.includes('rooms') ||
+    name.includes('image') ||
+    name.includes('upload') ||
+    name.includes('invite') ||
+    name.includes('public')
+  ) {
+    return 1;
+  }
+
   // Financial & Subscription & Notification & Search -> AppStack3
   return 3;
 }
@@ -94,7 +104,7 @@ module.exports = function (resource, logicalId) {
     return false;
   }
 
-  // Extract function name associated with this resource
+  // Extract function name associated with this resource if available
   let fnName = null;
 
   if (logicalId.endsWith('LambdaFunction')) {
@@ -123,22 +133,18 @@ module.exports = function (resource, logicalId) {
 
   // If matched to a Lambda function:
   if (fnName) {
-    // Keep non-HTTP / root-triggered functions & custom resource lambdas in Root to prevent Root <-> AppStack cycles
+    // Keep non-HTTP / root-triggered functions in Root to prevent Root <-> AppStack cycles
     if (rootFunctions.has(fnName.toLowerCase()) || fnName.toLowerCase().includes('custom')) {
       ejectFromNestedStack(this, logicalId);
       return false;
     }
 
-    let hash = 0;
-    for (let i = 0; i < fnName.length; i++) {
-      hash = (hash * 31 + fnName.charCodeAt(i)) >>> 0;
-    }
-    const bucket = hash % 5;
+    const bucket = getDomainBucket(fnName);
     return { destination: `AppStack${bucket}`, force: true };
   }
 
   // For ApiGateway Resources, LogGroups, Permissions, or Methods:
-  // Distribute into 5 AppStack buckets using baseName hashing to preserve CloudFormation stack placement compatibility
+  // Distribute into 4 domain-isolated AppStack buckets based on logicalId matching
   const type = resource.Type;
   if (
     type === 'AWS::Logs::LogGroup' ||
@@ -147,37 +153,10 @@ module.exports = function (resource, logicalId) {
     type === 'AWS::ApiGateway::Resource' ||
     type === 'AWS::ApiGateway::Method'
   ) {
-    let baseName = logicalId
-      .replace(/^ApiGatewayResource/, '')
-      .replace(/^ApiGatewayMethod/, '')
-      .replace(/LogGroup$/, '')
-      .replace(/LambdaFunction$/, '')
-      .replace(/LambdaPermission.*$/, '')
-      .replace(/Options$/, '')
-      .replace(/Post$/, '')
-      .replace(/Get$/, '')
-      .replace(/Put$/, '')
-      .replace(/Delete$/, '');
-
-    let hash = 0;
-    for (let i = 0; i < baseName.length; i++) {
-      hash = (hash * 31 + baseName.charCodeAt(i)) >>> 0;
-    }
-    const bucket = hash % 5;
+    const bucket = getDomainBucket(logicalId);
     return { destination: `AppStack${bucket}`, force: true };
   }
 
   ejectFromNestedStack(this, logicalId);
   return false;
 };
-
-
-
-
-
-
-
-
-
-
-
