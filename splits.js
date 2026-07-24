@@ -129,7 +129,7 @@ module.exports = function (resource, logicalId) {
     type === 'AWS::Events::Rule'
   ) {
     const bucket = getDomainBucket(logicalId);
-    return { destination: `AppStack${bucket}` };
+    return { destination: `AppStack${bucket}`, force: true };
   }
 
   ejectFromNestedStack(this, logicalId);
