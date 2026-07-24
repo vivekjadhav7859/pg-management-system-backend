@@ -1,14 +1,11 @@
 /**
  * Custom stack splitting rules for serverless-plugin-split-stacks.
- * Groups HTTP Lambda functions together with their LogGroups, Permissions,
- * and ApiGateway Methods into 4 domain-based nested application stacks (AppStack0..3).
+ * Groups Lambda functions and their dependent resources (LogGroups, Permissions,
+ * ApiGateway Resources, and ApiGateway Methods) into 5 nested application stacks (AppStack0..4).
  * 
- * AppStack0: Auth & Admin
- * AppStack1: Property & Room Management
- * AppStack2: Tenant, Booking, Agreement, Requests & Complaints
- * AppStack3: Financial, Subscriptions, Search & Notifications
- * 
- * Keep ApiGateway Resources, Custom Resources, Event Rules, and Root Functions in Root.
+ * Preserves CloudFormation compatibility for existing API Gateway resources in deployed stages,
+ * while keeping Root-level triggers (Cognito, Event Rules, DynamoDB Streams), Authorizers, RestApi,
+ * IAM Roles, DynamoDB, Cognito, S3, and KMS in Root.
  */
 
 // List of Lambda functions triggered by Root-level resources (Cognito, Event Rules, DynamoDB Streams)
@@ -88,12 +85,6 @@ module.exports = function (resource, logicalId) {
     return false;
   }
 
-  // Keep ApiGateway Resources in Root to prevent cross-stack parent-child dependency loops
-  if (resource.Type === 'AWS::ApiGateway::Resource') {
-    ejectFromNestedStack(this, logicalId);
-    return false;
-  }
-
   // Keep Root-level triggers/custom resources in Root
   if (
     resource.Type === 'AWS::Events::Rule' ||
@@ -139,30 +130,48 @@ module.exports = function (resource, logicalId) {
       return false;
     }
 
-    const bucket = getFeatureBucket(fnName);
+    let hash = 0;
+    for (let i = 0; i < fnName.length; i++) {
+      hash = (hash * 31 + fnName.charCodeAt(i)) >>> 0;
+    }
+    const bucket = hash % 5;
     return { destination: `AppStack${bucket}`, force: true };
   }
 
-  // For OPTIONS methods or other function-related resources without a direct Lambda function target,
-  // distribute into AppStack buckets using logicalId hashing to keep Root stack small (~140 resources).
+  // For ApiGateway Resources, LogGroups, Permissions, or Methods:
+  // Distribute into 5 AppStack buckets using baseName hashing to preserve CloudFormation stack placement compatibility
   const type = resource.Type;
   if (
     type === 'AWS::Logs::LogGroup' ||
     type === 'AWS::Lambda::Function' ||
     type === 'AWS::Lambda::Permission' ||
+    type === 'AWS::ApiGateway::Resource' ||
     type === 'AWS::ApiGateway::Method'
   ) {
+    let baseName = logicalId
+      .replace(/^ApiGatewayResource/, '')
+      .replace(/^ApiGatewayMethod/, '')
+      .replace(/LogGroup$/, '')
+      .replace(/LambdaFunction$/, '')
+      .replace(/LambdaPermission.*$/, '')
+      .replace(/Options$/, '')
+      .replace(/Post$/, '')
+      .replace(/Get$/, '')
+      .replace(/Put$/, '')
+      .replace(/Delete$/, '');
+
     let hash = 0;
-    for (let i = 0; i < logicalId.length; i++) {
-      hash = (hash * 31 + logicalId.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < baseName.length; i++) {
+      hash = (hash * 31 + baseName.charCodeAt(i)) >>> 0;
     }
-    const bucket = hash % 4;
+    const bucket = hash % 5;
     return { destination: `AppStack${bucket}`, force: true };
   }
 
   ejectFromNestedStack(this, logicalId);
   return false;
 };
+
 
 
 
