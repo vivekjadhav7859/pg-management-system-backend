@@ -142,14 +142,14 @@ provider:
             - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
             - !GetAtt EmailLogsTable.Arn
             - !Sub "${EmailLogsTable.Arn}/index/*"
-            - !GetAtt PolicyAcceptanceLogsTable.Arn
-            - !Sub "${PolicyAcceptanceLogsTable.Arn}/index/*"
-            - !GetAtt AuditLogsTable.Arn
-            - !Sub "${AuditLogsTable.Arn}/index/*"
-            - !GetAtt UserConsentsTable.Arn
-            - !Sub "${UserConsentsTable.Arn}/index/*"
-            - !GetAtt DataRequestsTable.Arn
-            - !Sub "${DataRequestsTable.Arn}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-policy-logs-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-policy-logs-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-audit-logs-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-audit-logs-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-user-consents-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-user-consents-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-data-requests-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-data-requests-${self:provider.stage}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}"
@@ -2060,126 +2060,15 @@ resources:
           - Key: Service
             Value: ${self:service}
 
-    # Policy Acceptance Audit Logs Table
-    PolicyAcceptanceLogsTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Retain
-      Properties:
-        TableName: ${self:service}-policy-logs-${self:provider.stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: logId
-            AttributeType: S
-          - AttributeName: userId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: logId
-            KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: UserIdIndex
-            KeySchema:
-              - AttributeName: userId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-        PointInTimeRecoverySpecification:
-          PointInTimeRecoveryEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-
-    # Central Security Audit Logs Table
-    AuditLogsTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Retain
-      Properties:
-        TableName: ${self:service}-audit-logs-${self:provider.stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: auditId
-            AttributeType: S
-          - AttributeName: userId
-            AttributeType: S
-          - AttributeName: timestamp
-            AttributeType: S
-        KeySchema:
-          - AttributeName: auditId
-            KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: UserIdTimestampIndex
-            KeySchema:
-              - AttributeName: userId
-                KeyType: HASH
-              - AttributeName: timestamp
-                KeyType: RANGE
-            Projection:
-              ProjectionType: ALL
-        PointInTimeRecoverySpecification:
-          PointInTimeRecoveryEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-
-    # User Consents and Communication Preferences Table
-    UserConsentsTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Retain
-      Properties:
-        TableName: ${self:service}-user-consents-${self:provider.stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: userId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: userId
-            KeyType: HASH
-        PointInTimeRecoverySpecification:
-          PointInTimeRecoveryEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-
-    # Data Export and Erasure Requests Table (DPDP Compliance)
-    DataRequestsTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Retain
-      Properties:
-        TableName: ${self:service}-data-requests-${self:provider.stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: requestId
-            AttributeType: S
-          - AttributeName: userId
-            AttributeType: S
-          - AttributeName: createdAt
-            AttributeType: S
-        KeySchema:
-          - AttributeName: requestId
-            KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: UserIdStatusIndex
-            KeySchema:
-              - AttributeName: userId
-                KeyType: HASH
-              - AttributeName: createdAt
-                KeyType: RANGE
-            Projection:
-              ProjectionType: ALL
-        PointInTimeRecoverySpecification:
-          PointInTimeRecoveryEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-
-    # Pre-existing in DynamoDB: SubscriptionsTable and WebhookEventsTable
+    # Pre-existing in DynamoDB: PolicyAcceptanceLogsTable, AuditLogsTable, UserConsentsTable, DataRequestsTable, SubscriptionsTable, WebhookEventsTable
+    # PolicyAcceptanceLogsTable:
+    #   Type: AWS::DynamoDB::Table
+    # AuditLogsTable:
+    #   Type: AWS::DynamoDB::Table
+    # UserConsentsTable:
+    #   Type: AWS::DynamoDB::Table
+    # DataRequestsTable:
+    #   Type: AWS::DynamoDB::Table
     # SubscriptionsTable:
     #   Type: AWS::DynamoDB::Table
     # WebhookEventsTable:
