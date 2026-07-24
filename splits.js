@@ -70,15 +70,20 @@ function getDomainBucket(logicalId) {
 }
 
 module.exports = function (resource, logicalId) {
-  // Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS, and Custom Resources in root
+  // Keep Authorizer, RestApi, Deployment, ApiGateway Resources & Methods, IAM Roles, DynamoDB, Cognito, S3, KMS in root
+  // keeping ApiGateway resources in Root prevents cross-stack circular dependencies between nested stacks and ApiGatewayDeployment.
   if (
     logicalId.startsWith('Authorizer') ||
-    logicalId.startsWith('ApiGatewayRestApi') ||
-    logicalId.startsWith('ApiGatewayDeployment') ||
+    logicalId.startsWith('ApiGateway') ||
     logicalId.startsWith('IamRole') ||
     logicalId.startsWith('Custom') ||
     logicalId.startsWith('CustomResource') ||
-    logicalId.startsWith('CustomDashresource')
+    logicalId.startsWith('CustomDashresource') ||
+    resource.Type === 'AWS::ApiGateway::Resource' ||
+    resource.Type === 'AWS::ApiGateway::Method' ||
+    resource.Type === 'AWS::ApiGateway::RestApi' ||
+    resource.Type === 'AWS::ApiGateway::Deployment' ||
+    resource.Type === 'AWS::ApiGateway::Authorizer'
   ) {
     ejectFromNestedStack(this, logicalId);
     return false;
@@ -86,18 +91,11 @@ module.exports = function (resource, logicalId) {
 
   // Extract baseName for function / resource matching
   let baseName = logicalId
-    .replace(/^ApiGatewayResource/, '')
-    .replace(/^ApiGatewayMethod/, '')
     .replace(/LogGroup$/, '')
     .replace(/LambdaFunction$/, '')
     .replace(/LambdaPermission.*$/, '')
     .replace(/EventsRuleSchedule.*$/, '')
-    .replace(/EventSourceMapping.*$/, '')
-    .replace(/Options$/, '')
-    .replace(/Post$/, '')
-    .replace(/Get$/, '')
-    .replace(/Put$/, '')
-    .replace(/Delete$/, '');
+    .replace(/EventSourceMapping.*$/, '');
 
   const lowerBase = baseName.toLowerCase();
   const lowerLogical = logicalId.toLowerCase();
@@ -124,8 +122,6 @@ module.exports = function (resource, logicalId) {
     type === 'AWS::Logs::LogGroup' ||
     type === 'AWS::Lambda::Function' ||
     type === 'AWS::Lambda::Permission' ||
-    type === 'AWS::ApiGateway::Resource' ||
-    type === 'AWS::ApiGateway::Method' ||
     type === 'AWS::Events::Rule'
   ) {
     const bucket = getDomainBucket(logicalId);
