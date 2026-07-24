@@ -56,7 +56,7 @@ module.exports = function (resource, logicalId) {
       hash = (hash * 31 + fnName.charCodeAt(i)) >>> 0;
     }
     const bucket = hash % 5;
-    return { destination: `AppStack${bucket}` };
+    return { destination: `AppStack${bucket}`, force: true };
   }
 
   // For OPTIONS methods or other function-related resources without a direct Lambda function target,
@@ -73,10 +73,11 @@ module.exports = function (resource, logicalId) {
       hash = (hash * 31 + logicalId.charCodeAt(i)) >>> 0;
     }
     const bucket = hash % 5;
-    return { destination: `AppStack${bucket}` };
+    return { destination: `AppStack${bucket}`, force: true };
   }
 
   return false;
 };
+
 
 
