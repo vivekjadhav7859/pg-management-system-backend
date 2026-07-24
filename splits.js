@@ -16,6 +16,7 @@
 const rootFunctions = new Set([
   'cognitopresignup',
   'cognitocustommessage',
+  'generatemonthlybills',
   'ontenantcreated',
   'scheduledrentreminder'
 ]);
