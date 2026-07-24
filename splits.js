@@ -1,10 +1,10 @@
 /**
  * Custom stack splitting rules for serverless-plugin-split-stacks.
- * Groups HTTP Lambda functions, LogGroups, Permissions, ApiGateway Resources,
- * and ApiGateway Methods into 4 domain-isolated nested application stacks (AppStack0..3).
+ * Groups HTTP Lambda functions, LogGroups, Permissions into 4 domain-isolated nested application stacks (AppStack0..3),
+ * while grouping ALL ApiGateway Resources and Methods into AppStack1 to prevent cross-stack parent-child route dependencies.
  * 
  * AppStack0: Auth & Admin (/auth/*, /admin/*)
- * AppStack1: Property, Room, Public Invites & Image Uploads (/properties/*, /rooms/*, /invite-code/*, /upload/*)
+ * AppStack1: All ApiGateway Resources & Methods, plus Property, Room, Public Invites & Image Uploads (/properties/*, /rooms/*, /invite-code/*, /upload/*)
  * AppStack2: Tenant, Booking, Agreement, Requests & Complaints (/tenants/*, /tenant/*, /requests/*, /complaints/*, /kyc/*, /booking/*, /agreement/*)
  * AppStack3: Financial, Subscriptions, Search & Notifications (/subscriptions/*, /rent/*, /expenses/*, /notifications/*, /search/*, /financial/*)
  * 
@@ -35,7 +35,18 @@ function getDomainBucket(logicalId) {
   const name = logicalId.toLowerCase();
   
   // 1. Auth & Admin -> AppStack0
-  if (name.includes('auth') || name.includes('admin')) {
+  if (
+    name.includes('auth') ||
+    name.includes('admin') ||
+    name.includes('signup') ||
+    name.includes('login') ||
+    name.includes('logout') ||
+    name.includes('profile') ||
+    name.includes('password') ||
+    name.includes('verification') ||
+    name.includes('token') ||
+    name.includes('policy')
+  ) {
     return 0;
   }
   
@@ -70,20 +81,15 @@ function getDomainBucket(logicalId) {
 }
 
 module.exports = function (resource, logicalId) {
-  // Keep Authorizer, RestApi, Deployment, ApiGateway Resources & Methods, IAM Roles, DynamoDB, Cognito, S3, KMS in root
-  // keeping ApiGateway resources in Root prevents cross-stack circular dependencies between nested stacks and ApiGatewayDeployment.
+  // Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS in root
   if (
     logicalId.startsWith('Authorizer') ||
-    logicalId.startsWith('ApiGateway') ||
+    logicalId.startsWith('ApiGatewayRestApi') ||
+    logicalId.startsWith('ApiGatewayDeployment') ||
     logicalId.startsWith('IamRole') ||
     logicalId.startsWith('Custom') ||
     logicalId.startsWith('CustomResource') ||
-    logicalId.startsWith('CustomDashresource') ||
-    resource.Type === 'AWS::ApiGateway::Resource' ||
-    resource.Type === 'AWS::ApiGateway::Method' ||
-    resource.Type === 'AWS::ApiGateway::RestApi' ||
-    resource.Type === 'AWS::ApiGateway::Deployment' ||
-    resource.Type === 'AWS::ApiGateway::Authorizer'
+    logicalId.startsWith('CustomDashresource')
   ) {
     ejectFromNestedStack(this, logicalId);
     return false;
@@ -118,6 +124,12 @@ module.exports = function (resource, logicalId) {
   }
 
   const type = resource.Type;
+
+  // Place ALL ApiGateway Resources and Methods into AppStack1 so parent-child path hierarchies stay together
+  if (type === 'AWS::ApiGateway::Resource' || type === 'AWS::ApiGateway::Method') {
+    return { destination: 'AppStack1', force: true };
+  }
+
   if (
     type === 'AWS::Logs::LogGroup' ||
     type === 'AWS::Lambda::Function' ||
