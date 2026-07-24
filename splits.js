@@ -3,7 +3,7 @@
  * Groups HTTP Lambda functions, LogGroups, Permissions into 4 domain-isolated nested application stacks (AppStack0..3),
  * while grouping ALL ApiGateway Resources and Methods into AppStack1 to prevent cross-stack parent-child route dependencies.
  * 
- * AppStack0: Auth & Admin (/auth/*, /admin/*)
+ * AppStack0: Auth & Admin (/auth/*, /admin/*, /privacy/*, /consent/*)
  * AppStack1: All ApiGateway Resources & Methods, plus Property, Room, Public Invites & Image Uploads (/properties/*, /rooms/*, /invite-code/*, /upload/*)
  * AppStack2: Tenant, Booking, Agreement, Requests & Complaints (/tenants/*, /tenant/*, /requests/*, /complaints/*, /kyc/*, /booking/*, /agreement/*)
  * AppStack3: Financial, Subscriptions, Search & Notifications (/subscriptions/*, /rent/*, /expenses/*, /notifications/*, /search/*, /financial/*)
@@ -34,7 +34,20 @@ function ejectFromNestedStack(context, logicalId) {
 function getDomainBucket(logicalId) {
   const name = logicalId.toLowerCase();
   
-  // 1. Auth & Admin -> AppStack0
+  // 1. Property, Rooms, Image Uploads, Public Property Invites & Join Requests -> AppStack1
+  if (
+    name.includes('invite') ||
+    name.includes('publicjoin') ||
+    name.includes('properties') ||
+    name.includes('property') ||
+    name.includes('rooms') ||
+    name.includes('room') ||
+    name.includes('upload')
+  ) {
+    return 1;
+  }
+
+  // 2. Auth, User Profile, Admin, Account Verification, Privacy, Consent, Audit Logs -> AppStack0
   if (
     name.includes('auth') ||
     name.includes('admin') ||
@@ -44,13 +57,21 @@ function getDomainBucket(logicalId) {
     name.includes('profile') ||
     name.includes('password') ||
     name.includes('verification') ||
+    name.includes('verify') ||
+    name.includes('email') ||
     name.includes('token') ||
-    name.includes('policy')
+    name.includes('policy') ||
+    name.includes('consent') ||
+    name.includes('privacy') ||
+    name.includes('audit') ||
+    name.includes('exportdata') ||
+    name.includes('erasure') ||
+    name.includes('activateaccount')
   ) {
     return 0;
   }
   
-  // 2. Tenants, Tenant, Requests, Complaints, KYC, Booking, Agreement -> AppStack2
+  // 3. Tenants, Tenant Management, Booking Requests, Agreements, Complaints -> AppStack2
   if (
     name.includes('tenants') ||
     name.includes('tenant') ||
@@ -64,19 +85,7 @@ function getDomainBucket(logicalId) {
     return 2;
   }
 
-  // 3. Property, Rooms, Upload, Invite-code -> AppStack1
-  if (
-    name.includes('properties') ||
-    name.includes('property') ||
-    name.includes('rooms') ||
-    name.includes('room') ||
-    name.includes('upload') ||
-    name.includes('invite')
-  ) {
-    return 1;
-  }
-  
-  // 4. Financial, Subscriptions, Notifications, Search -> AppStack3
+  // 4. Financial, Subscriptions, Payments, Expenses, Notifications, Search -> AppStack3
   return 3;
 }
 
