@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const USER_TABLE = process.env.USER_TABLE;
+const POLICY_ACCEPTANCE_LOG_TABLE = process.env.POLICY_ACCEPTANCE_LOG_TABLE || `${process.env.USER_TABLE?.replace('-users-', '-policy-logs-')}`;
 
 /**
  * Create user entry in DynamoDB
@@ -298,3 +299,96 @@ exports.deleteUser = async (userId) => {
         throw error;
     }
 };
+
+/**
+ * Update user policy consent and marketing preferences in DynamoDB
+ */
+exports.updateUserPolicyConsent = async (userId, policyConsent, marketingPreferences = {}) => {
+    try {
+        const timestamp = new Date().toISOString();
+        const params = {
+            TableName: USER_TABLE,
+            Key: { userId },
+            UpdateExpression: 'SET policyConsent = :pc, marketingPreferences = :mp, updatedAt = :t',
+            ExpressionAttributeValues: {
+                ':pc': policyConsent,
+                ':mp': marketingPreferences,
+                ':t': timestamp
+            },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        const result = await dynamodb.update(params).promise();
+        return result.Attributes;
+    } catch (error) {
+        console.error('Error updating user policy consent:', error);
+        throw error;
+    }
+};
+
+/**
+ * Write an immutable policy acceptance log for audit trail & compliance
+ */
+exports.logPolicyAcceptance = async (logData) => {
+    try {
+        const crypto = require('crypto');
+        const logId = `log_${uuidv4()}`;
+        const timestamp = new Date().toISOString();
+
+        const payload = JSON.stringify({
+            userId: logData.userId,
+            acceptedPolicies: logData.acceptedPolicies,
+            acceptedAt: timestamp,
+            acceptedIp: logData.acceptedIp || 'N/A'
+        });
+
+        const checksumHash = crypto.createHash('sha256').update(payload).digest('hex');
+
+        const item = {
+            logId,
+            userId: logData.userId,
+            userEmail: logData.userEmail || null,
+            userType: logData.userType || null,
+            acceptedPolicies: logData.acceptedPolicies,
+            marketingPreferences: logData.marketingPreferences || {},
+            acceptedAt: timestamp,
+            acceptedIp: logData.acceptedIp || 'N/A',
+            userAgent: logData.userAgent || 'N/A',
+            acceptanceMethod: logData.acceptanceMethod || 'WEB_FORM',
+            checksumHash
+        };
+
+        const params = {
+            TableName: POLICY_ACCEPTANCE_LOG_TABLE,
+            Item: item
+        };
+
+        await dynamodb.put(params).promise();
+        return item;
+    } catch (error) {
+        console.error('Error logging policy acceptance:', error);
+        throw error;
+    }
+};
+
+/**
+ * Fetch policy acceptance log history for a user
+ */
+exports.getPolicyLogsByUserId = async (userId) => {
+    try {
+        const params = {
+            TableName: POLICY_ACCEPTANCE_LOG_TABLE,
+            IndexName: 'UserIdIndex',
+            KeyConditionExpression: 'userId = :u',
+            ExpressionAttributeValues: {
+                ':u': userId
+            }
+        };
+
+        const result = await dynamodb.query(params).promise();
+        return result.Items || [];
+    } catch (error) {
+        console.error('Error fetching policy logs by userId:', error);
+        return [];
+    }
+};

@@ -62,6 +62,7 @@ provider:
     COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
     INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
     EMAIL_LOG_TABLE: ${self:service}-email-logs-${self:provider.stage}
+    POLICY_ACCEPTANCE_LOG_TABLE: ${self:service}-policy-logs-${self:provider.stage}
     SUBSCRIPTION_TABLE: ${self:service}-subscriptions-${self:provider.stage}
     WEBHOOK_EVENT_TABLE: ${self:service}-webhook-events-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
@@ -138,6 +139,8 @@ provider:
             - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
             - !GetAtt EmailLogsTable.Arn
             - !Sub "${EmailLogsTable.Arn}/index/*"
+            - !GetAtt PolicyAcceptanceLogsTable.Arn
+            - !Sub "${PolicyAcceptanceLogsTable.Arn}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}"
@@ -238,6 +241,31 @@ functions:
       - http:
           path: auth/logout
           method: post
+          cors: *corsConfig
+
+  # ─── Legal & Policy Compliance ─────────────────────────────────────────────
+  getLatestPolicies:
+    handler: src/functions/auth/getLatestPolicies.handler
+    events:
+      - http:
+          path: auth/policies/latest
+          method: get
+          cors: *corsConfig
+
+  acceptPolicies:
+    handler: src/functions/auth/acceptPolicies.handler
+    events:
+      - http:
+          path: user/policy-acceptance
+          method: post
+          cors: *corsConfig
+
+  getPolicyHistory:
+    handler: src/functions/auth/getPolicyHistory.handler
+    events:
+      - http:
+          path: user/policy-acceptance/history
+          method: get
           cors: *corsConfig
 
   # ─── Forgot Password ────────────────────────────────────────────────────────
@@ -1946,6 +1974,36 @@ resources:
           - IndexName: OwnerIdIndex
             KeySchema:
               - AttributeName: ownerIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Policy Acceptance Audit Logs Table
+    PolicyAcceptanceLogsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-policy-logs-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: logId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: logId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
