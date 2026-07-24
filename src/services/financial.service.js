@@ -290,6 +290,8 @@ exports.createExpense = async (expenseData) => {
             description: expenseData.description || null,
             notes: expenseData.notes || null,
             attachments: expenseData.attachments || [], // S3 URLs for bills/receipts
+            recurring: expenseData.recurring !== undefined ? expenseData.recurring : false,
+            frequency: expenseData.frequency || null,
             
             // Metadata
             createdAt: timestamp,
@@ -418,9 +420,46 @@ exports.updateExpense = async (expenseId, updates) => {
             ':updatedAt': timestamp
         };
 
+        if (updates.expenseType !== undefined) {
+            updateExpression += ', expenseType = :expenseType, expenseTypeIndex = :expenseTypeIndex';
+            expressionAttributeValues[':expenseType'] = updates.expenseType;
+            expressionAttributeValues[':expenseTypeIndex'] = updates.expenseType;
+        }
+
+        if (updates.category !== undefined) {
+            updateExpression += ', category = :category';
+            expressionAttributeValues[':category'] = updates.category;
+        }
+
         if (updates.amount !== undefined) {
             updateExpression += ', amount = :amount';
             expressionAttributeValues[':amount'] = updates.amount;
+        }
+
+        if (updates.expenseDate !== undefined) {
+            updateExpression += ', expenseDate = :expenseDate';
+            expressionAttributeValues[':expenseDate'] = updates.expenseDate;
+        }
+
+        if (updates.expenseMonth !== undefined) {
+            updateExpression += ', expenseMonth = :expenseMonth, expenseMonthIndex = :expenseMonthIndex';
+            expressionAttributeValues[':expenseMonth'] = updates.expenseMonth;
+            expressionAttributeValues[':expenseMonthIndex'] = updates.expenseMonth;
+        }
+
+        if (updates.paymentMode !== undefined) {
+            updateExpression += ', paymentMode = :paymentMode';
+            expressionAttributeValues[':paymentMode'] = updates.paymentMode;
+        }
+
+        if (updates.paidTo !== undefined) {
+            updateExpression += ', paidTo = :paidTo';
+            expressionAttributeValues[':paidTo'] = updates.paidTo;
+        }
+
+        if (updates.billNumber !== undefined) {
+            updateExpression += ', billNumber = :billNumber';
+            expressionAttributeValues[':billNumber'] = updates.billNumber;
         }
 
         if (updates.description !== undefined) {
@@ -436,6 +475,16 @@ exports.updateExpense = async (expenseId, updates) => {
         if (updates.attachments !== undefined) {
             updateExpression += ', attachments = :attachments';
             expressionAttributeValues[':attachments'] = updates.attachments;
+        }
+
+        if (updates.recurring !== undefined) {
+            updateExpression += ', recurring = :recurring';
+            expressionAttributeValues[':recurring'] = updates.recurring;
+        }
+
+        if (updates.frequency !== undefined) {
+            updateExpression += ', frequency = :frequency';
+            expressionAttributeValues[':frequency'] = updates.frequency;
         }
 
         const params = {

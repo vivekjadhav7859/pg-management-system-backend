@@ -3,7 +3,7 @@ const response = require('../../utils/response');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-const REQUEST_ENTITY_TYPES = new Set(['bookingRequest', 'complaint', 'tenantJoinRequest']);
+const REQUEST_ENTITY_TYPES = new Set(['bookingRequest', 'tenantJoinRequest']);
 
 exports.handler = async (event) => {
     try {
@@ -22,9 +22,15 @@ exports.handler = async (event) => {
             ScanIndexForward: false,
         }).promise();
 
+        // REQ-01 & Phase 2: Exclusively filter for Booking Requests and Tenant Join Requests.
+        // Exclude Complaints (managed in Complaints Module) and internal/check-out requests.
         const requests = (result.Items || []).filter((item) => {
+            // Strictly exclude complaints and checkouts regardless of type string
+            if (item.entityType === 'complaint' || item.entityType === 'checkout' || item.type === 'Complaint Raised' || item.type === 'Check-out Request') {
+                return false;
+            }
             if (REQUEST_ENTITY_TYPES.has(item.entityType) && item.requestStatus) return true;
-            return ['Booking Request', 'Schedule Visit Request', 'Tenant Join Request', 'Check-out Request', 'Complaint Raised'].includes(item.type);
+            return ['Booking Request', 'Schedule Visit Request', 'Tenant Join Request'].includes(item.type);
         }).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
         return response.success({

@@ -43,11 +43,30 @@ exports.handler = async (event) => {
             Key: { propertyId },
         }).promise();
 
+        const NinetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+        const expiresAt = new Date(Date.now() + NinetyDaysMs).toISOString();
+
         if (existing.Item) {
+            const isExpired = existing.Item.expiresAt && new Date() > new Date(existing.Item.expiresAt);
+            if (!existing.Item.expiresAt || isExpired) {
+                await dynamodb.update({
+                    TableName: process.env.INVITE_CODE_TABLE,
+                    Key: { propertyId },
+                    UpdateExpression: 'SET expiresAt = :exp, status = :st, updatedAt = :ts',
+                    ExpressionAttributeValues: {
+                        ':exp': expiresAt,
+                        ':st': 'active',
+                        ':ts': new Date().toISOString(),
+                    },
+                }).promise();
+                existing.Item.expiresAt = expiresAt;
+            }
+
             return response.success({
                 code: existing.Item.code,
                 propertyId,
                 propertyName: property.propertyName,
+                expiresAt: existing.Item.expiresAt || expiresAt,
                 alreadyExisted: true,
             });
         }
@@ -71,7 +90,9 @@ exports.handler = async (event) => {
             code,
             ownerId: userId,
             propertyName: property.propertyName,
+            status: 'active',
             createdAt: new Date().toISOString(),
+            expiresAt,
         };
 
         await dynamodb.put({
@@ -79,7 +100,7 @@ exports.handler = async (event) => {
             Item: item,
         }).promise();
 
-        return response.success({ code, propertyId, propertyName: property.propertyName });
+        return response.success({ code, propertyId, propertyName: property.propertyName, expiresAt });
     } catch (err) {
         console.error('[generateInviteCode]', err);
         return response.error(err.message || 'Internal server error', 500);

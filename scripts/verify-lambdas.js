@@ -22,6 +22,7 @@ const os = require('os');
 const args = process.argv.slice(2);
 const stage = args.includes('--stage') ? args[args.indexOf('--stage') + 1] : 'dev';
 const autoFix = !args.includes('--no-fix');
+const forceRebuild = args.includes('--force');
 const region = 'ap-south-1';
 const service = 'pg-management-backend';
 
@@ -67,9 +68,11 @@ const FUNCTIONS = [
   { name: 'sendReminder',         src: 'src/functions/financial/sendReminder.js' },
   { name: 'getReminderSettings',  src: 'src/functions/financial/getReminderSettings.js' },
   { name: 'updateReminderSettings', src: 'src/functions/financial/updateReminderSettings.js' },
+  { name: 'getNotificationLogs',  src: 'src/functions/notifications/getNotificationLogs.js' },
+  { name: 'sesEventHandler',      src: 'src/functions/notifications/sesEventHandler.js' },
 ];
 
-const MIN_HEALTHY_BYTES = 50_000; // 50 KB — broken zips are ~895 bytes
+const MIN_HEALTHY_BYTES = 2_000; // 2 KB — broken zips are ~895 bytes, lightweight handlers are ~3.4 KB
 
 function awsCli(args) {
   const result = spawnSync('aws', args, { encoding: 'utf8' });
@@ -95,7 +98,7 @@ function getLambdaCodeSize(functionName) {
 function resolveBuiltFile(fn) {
   const buildDir = path.join(__dirname, '..', '.serverless', 'build');
   const fromPackage = path.join(buildDir, fn.src);
-  if (fs.existsSync(fromPackage)) {
+  if (!forceRebuild && fs.existsSync(fromPackage)) {
     return fromPackage;
   }
 
@@ -190,10 +193,13 @@ function fixLambda(fn, lambdaName) {
   const zipPath = buildZipForFunction(fn);
   if (!zipPath) return false;
 
+  const relZipPath = path.relative(process.cwd(), zipPath).replace(/\\/g, '/');
+  const filebArg = `fileb://${relZipPath.startsWith('.') ? relZipPath : './' + relZipPath}`;
+
   const result = spawnSync('aws', [
     'lambda', 'update-function-code',
     '--function-name', lambdaName,
-    '--zip-file', `fileb://${zipPath}`,
+    '--zip-file', filebArg,
     '--region', region,
     '--query', 'CodeSize',
     '--output', 'text',
@@ -203,6 +209,7 @@ function fixLambda(fn, lambdaName) {
     console.error(`  ✗ AWS CLI error: ${result.stderr}`);
     return false;
   }
+
 
   const newSize = parseInt(result.stdout.trim(), 10);
   console.log(`  ✅ Fixed! New code size: ${(newSize / 1024).toFixed(0)} KB`);
@@ -224,8 +231,8 @@ async function main() {
 
     if (size < 0) {
       console.log(`  ⚠️  ${fn.name}: NOT FOUND (skipping)`);
-    } else if (size < MIN_HEALTHY_BYTES) {
-      console.log(`  ❌ ${fn.name}: ${size} bytes — BROKEN`);
+    } else if (forceRebuild || size < MIN_HEALTHY_BYTES) {
+      console.log(`  ❌ ${fn.name}: ${size} bytes — ${forceRebuild ? 'REBUILDING' : 'BROKEN'}`);
       broken.push(fn);
     } else {
       console.log(`  ✅ ${fn.name}: ${(size / 1024).toFixed(0)} KB`);
