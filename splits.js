@@ -34,24 +34,57 @@ function ejectFromNestedStack(context, logicalId) {
 function getDomainBucket(logicalId) {
   const name = logicalId.toLowerCase();
 
-  // ── PRIORITY CHECK: Tenant & Complaint management functions ──────────────────
-  // These MUST be checked BEFORE the AppStack1 property/invite/upload keywords
-  // because functions like inviteTenant, linkTenantProperty, uploadKYC contain
-  // substrings ('invite', 'property', 'upload') that would otherwise route them
-  // to AppStack1 — causing a cross-stack Lambda name collision with the live stack.
+  // 1. Subscriptions & Prepaid checkout -> AppStack3
+  if (name.includes('subscription') || name.includes('razorpay')) {
+    return 3;
+  }
+
+  // 2. Email & Notifications -> AppStack3
+  if (name.includes('broadcastemail') || name.includes('ses') || name.includes('notification')) {
+    return 3;
+  }
+
+  // 3. Privacy, Data Export & Erasure -> AppStack0
+  if (name.includes('erasure') || name.includes('privacy') || name.includes('consent') || name.includes('audit') || name.includes('exportdata')) {
+    return 0;
+  }
+
+  // 4. Public Join & Invites -> AppStack1
+  if (name.includes('publicjoin') || name.includes('publicpropertyinvite') || name.includes('publicavailablerooms')) {
+    return 1;
+  }
+
+  // 5. Tenant Management, Tenant Portal, Booking, Agreement, Requests, Complaints -> AppStack2
   if (
-    name.includes('invitetenant') ||   // inviteTenant → AppStack2 (live state)
-    name.includes('resendinvitation') || // resendInvitation → AppStack2 (live state)
-    name.includes('uploadkyc') ||       // uploadKYC → AppStack2 (live state)
-    name.includes('linktenantprop')     // linkTenantProperty → AppStack2 (live state)
+    name.includes('invitetenant') ||
+    name.includes('checkintenant') ||
+    name.includes('resendinvitation') ||
+    name.includes('gettenants') ||
+    name.includes('gettenantbyid') ||
+    name.includes('updatetenant') ||
+    name.includes('checkouttenant') ||
+    name.includes('migratetenant') ||
+    name.includes('uploadkyc') ||
+    name.includes('gettenantdashboard') ||
+    name.includes('linktenantproperty') ||
+    name.includes('booking') ||
+    name.includes('agreement') ||
+    name.includes('requests') ||
+    name.includes('requestid') ||
+    name.includes('updaterequeststatus') ||
+    name.includes('bulkapproverequests') ||
+    name.includes('bulkdeleterequests') ||
+    name.includes('complaint') ||
+    name.includes('payrent') ||
+    name.includes('pushsubscription') ||
+    name.includes('tenant')
   ) {
     return 2;
   }
 
-  // 1. Property, Rooms, Image Uploads, Public Property Invites & Join Requests -> AppStack1
+  // 6. Property, Rooms, Public Invites, Image Uploads -> AppStack1
   if (
     name.includes('invite') ||
-    name.includes('publicjoin') ||
     name.includes('properties') ||
     name.includes('property') ||
     name.includes('rooms') ||
@@ -61,7 +94,7 @@ function getDomainBucket(logicalId) {
     return 1;
   }
 
-  // 2. Auth, User Profile, Admin, Account Verification, Privacy, Consent, Audit Logs -> AppStack0
+  // 7. Auth, User Profile, Admin, Policy & Verification -> AppStack0
   if (
     name.includes('auth') ||
     name.includes('admin') ||
@@ -75,31 +108,13 @@ function getDomainBucket(logicalId) {
     name.includes('email') ||
     name.includes('token') ||
     name.includes('policy') ||
-    name.includes('consent') ||
-    name.includes('privacy') ||
-    name.includes('audit') ||
-    name.includes('exportdata') ||
-    name.includes('erasure') ||
+    name.includes('policies') ||
     name.includes('activateaccount')
   ) {
     return 0;
   }
-  
-  // 3. Tenants, Tenant Management, Booking Requests, Agreements, Complaints -> AppStack2
-  if (
-    name.includes('tenants') ||
-    name.includes('tenant') ||
-    name.includes('requests') ||
-    name.includes('request') ||
-    name.includes('complaint') ||
-    name.includes('kyc') ||
-    name.includes('booking') ||
-    name.includes('agreement')
-  ) {
-    return 2;
-  }
 
-  // 4. Financial, Subscriptions, Payments, Expenses, Notifications, Search -> AppStack3
+  // 8. Default: Financial, Payments, Expenses, Search -> AppStack3
   return 3;
 }
 
