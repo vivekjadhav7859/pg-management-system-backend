@@ -709,7 +709,7 @@ functions:
             type: token
 
   checkInTenant:
-    handler: src/functions/tenant/inviteTenant.handler
+    handler: src/functions/tenant/checkInTenant.handler
     events:
       - http:
           path: tenants/check-in
