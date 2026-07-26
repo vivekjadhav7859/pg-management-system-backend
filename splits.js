@@ -120,16 +120,15 @@ function getDomainBucket(logicalId) {
 
 
 module.exports = function (resource, logicalId) {
-  // Keep Authorizer, RestApi, Deployment, ApiGateway Resources & Methods, IAM Roles, DynamoDB, Cognito, S3, KMS in root
+  // Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS in root
   if (
     logicalId.startsWith('Authorizer') ||
-    logicalId.startsWith('ApiGateway') ||
+    logicalId.startsWith('ApiGatewayRestApi') ||
+    logicalId.startsWith('ApiGatewayDeployment') ||
     logicalId.startsWith('IamRole') ||
     logicalId.startsWith('Custom') ||
     logicalId.startsWith('CustomResource') ||
     logicalId.startsWith('CustomDashresource') ||
-    resource.Type === 'AWS::ApiGateway::Resource' ||
-    resource.Type === 'AWS::ApiGateway::Method' ||
     resource.Type === 'AWS::ApiGateway::RestApi' ||
     resource.Type === 'AWS::ApiGateway::Deployment' ||
     resource.Type === 'AWS::ApiGateway::Authorizer'
@@ -168,6 +167,10 @@ module.exports = function (resource, logicalId) {
 
   const type = resource.Type;
 
+  // Place ALL ApiGateway Resources and Methods into AppStack1 so parent-child path hierarchies stay together
+  if (type === 'AWS::ApiGateway::Resource' || type === 'AWS::ApiGateway::Method') {
+    return { destination: 'AppStack1', force: true };
+  }
 
   if (
     type === 'AWS::Logs::LogGroup' ||

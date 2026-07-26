@@ -23,7 +23,7 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 ```
                             ┌─────────────────────────────────────────────────┐
                             │                   Root Stack                    │
-                            │  • API Gateway REST API, Resources & Methods    │
+                            │  • API Gateway REST API & Deployments           │
                             │  • Cognito User Pool & Client                   │
                             │  • Custom Lambda Authorizer                     │
                             │  • IAM Roles & Execution Policies               │
@@ -34,20 +34,20 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
          ▼                      ▼                                         ▼                      ▼
 ┌──────────────────┐  ┌──────────────────┐                     ┌──────────────────┐  ┌──────────────────┐
 │   AppStack0      │  │   AppStack1      │                     │   AppStack2      │  │   AppStack3      │
-│ (Auth & Privacy) │  │ (Properties &    │                     │(Tenant & Requests)│  │ (Financials &    │
-│                  │  │     Rooms)       │                     │                  │  │  Subscriptions)  │
+│ (Auth & Privacy) │  │(Property, Rooms &│                     │(Tenant & Requests)│  │ (Financials &    │
+│                  │  │   ApiGateway)    │                     │                  │  │  Subscriptions)  │
 │ • 22 Functions   │  │ • 21 Functions   │                     │ • 21 Functions   │  │ • 29 Functions   │
-│ • User Profiles  │  │ • Property CRUD  │                     │ • Tenant Check-In│  │ • Rent Collection│
-│ • Policy Audit   │  │ • Room Management│                     │ • Tenant Portal  │  │ • Expenses       │
-│ • GDPR/DPDP      │  │ • Image Upload   │                     │ • Requests/KYC   │  │ • Razorpay Sub.  │
-│ • 5 Parameters   │  │ • 5 Parameters   │                     │ • 5 Parameters   │  │ • 5 Parameters   │
+│ • User Profiles  │  │ • ApiGateway Path│                     │ • Tenant Check-In│  │ • Rent Collection│
+│ • Policy Audit   │  │   Resources      │                     │ • Tenant Portal  │  │ • Expenses       │
+│ • GDPR/DPDP      │  │ • Room & Property│                     │ • Requests/KYC   │  │ • Razorpay Sub.  │
+│ • 5 Parameters   │  │ • Image Upload   │                     │ • 5 Parameters   │  │ • 5 Parameters   │
 └──────────────────┘  └──────────────────┘                     └──────────────────┘  └──────────────────┘
 ```
 
 ### Stack Routing Rules (`splits.js`)
-- **Root Stack**: Authorizer, RestApi, ApiGateway Resources & Methods, Deployments, IAM Roles, DynamoDB Tables, Cognito User Pool, S3 Buckets, KMS Keys, and Cron Background Jobs (`scheduledRentReminder`, `generateMonthlyBills`, `onTenantCreated`).
+- **Root Stack**: Authorizer, RestApi, Deployment, IAM Roles, DynamoDB Tables, Cognito User Pool, S3 Buckets, KMS Keys, and Cron Background Jobs (`scheduledRentReminder`, `generateMonthlyBills`, `onTenantCreated`).
 - **AppStack0 (Auth, Privacy & Legal)**: 22 Functions. User Signup, Login, Password Reset, Policy Compliance, Audit Logs, GDPR Consent & Data Erasure (`/auth/*`, `/privacy/*`, `/consent/*`).
-- **AppStack1 (Properties & Rooms)**: 21 Functions. Property CRUD, Room Configuration, Bed Allocation, Image Upload URLs, Public Join Link validation (`/properties/*`, `/rooms/*`, `/upload/*`, `/invite-code/*`).
+- **AppStack1 (Properties, Rooms & ApiGateway Routes)**: 21 Functions & API Gateway Route Resources. Property CRUD, Room Configuration, Bed Allocation, Image Upload URLs, Public Join Link validation (`/properties/*`, `/rooms/*`, `/upload/*`, `/invite-code/*`).
 - **AppStack2 (Tenant & Request Operations)**: 21 Functions. Tenant Onboarding, Check-In/Check-Out, Agreement Signing, KYC Verification, Requests, Complaints (`/tenants/*`, `/tenant/*`, `/requests/*`, `/complaints/*`).
 - **AppStack3 (Financials, Subscriptions & Notifications)**: 29 Functions. Owner Rent Billing, Expense Tracking, Razorpay Subscriptions, SES Email Events, Web Push (`/subscriptions/*`, `/financial/*`, `/notifications/*`, `/search/*`).
 
