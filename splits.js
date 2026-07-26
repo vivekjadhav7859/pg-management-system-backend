@@ -33,7 +33,21 @@ function ejectFromNestedStack(context, logicalId) {
 
 function getDomainBucket(logicalId) {
   const name = logicalId.toLowerCase();
-  
+
+  // ── PRIORITY CHECK: Tenant & Complaint management functions ──────────────────
+  // These MUST be checked BEFORE the AppStack1 property/invite/upload keywords
+  // because functions like inviteTenant, linkTenantProperty, uploadKYC contain
+  // substrings ('invite', 'property', 'upload') that would otherwise route them
+  // to AppStack1 — causing a cross-stack Lambda name collision with the live stack.
+  if (
+    name.includes('invitetenant') ||   // inviteTenant → AppStack2 (live state)
+    name.includes('resendinvitation') || // resendInvitation → AppStack2 (live state)
+    name.includes('uploadkyc') ||       // uploadKYC → AppStack2 (live state)
+    name.includes('linktenantprop')     // linkTenantProperty → AppStack2 (live state)
+  ) {
+    return 2;
+  }
+
   // 1. Property, Rooms, Image Uploads, Public Property Invites & Join Requests -> AppStack1
   if (
     name.includes('invite') ||
@@ -88,6 +102,7 @@ function getDomainBucket(logicalId) {
   // 4. Financial, Subscriptions, Payments, Expenses, Notifications, Search -> AppStack3
   return 3;
 }
+
 
 module.exports = function (resource, logicalId) {
   // Keep Authorizer, RestApi, Deployment, IAM Roles, DynamoDB, Cognito, S3, KMS in root
