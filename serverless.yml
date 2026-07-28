@@ -33,6 +33,7 @@ custom:
     custom: splits.js
 
 plugins:
+  - ./scripts/remove-log-groups-plugin.js
   - serverless-plugin-split-stacks
 
 provider:
@@ -40,10 +41,12 @@ provider:
   runtime: nodejs20.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
+  apiName: ${self:service}-${self:provider.stage}-v2
   deploymentBucket: ${env:DEPLOYMENT_BUCKET, 'serverless-framework-deployments-ap-south-1-5fca437e-9fb3'}
   # Keep functions on $LATEST. Publishing a version for every function adds one
   # CloudFormation resource each and pushes this stack past AWS's 500-resource limit.
   versionFunctions: false
+
 
   environment:
     STAGE: ${self:provider.stage}
@@ -1521,6 +1524,7 @@ resources:
 
     CognitoUserPoolIdentityProviderGoogle:
       Type: AWS::Cognito::UserPoolIdentityProvider
+      DeletionPolicy: Retain
       Properties:
         ProviderName: Google
         ProviderType: Google
@@ -2008,6 +2012,8 @@ resources:
     # Property Invite Codes Table
     PropertyInviteCodesTable:
       Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
       Properties:
         TableName: ${self:service}-property-invite-codes-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST

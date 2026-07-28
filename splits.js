@@ -167,13 +167,15 @@ module.exports = function (resource, logicalId) {
 
   const type = resource.Type;
 
-  // Place ALL ApiGateway Resources and Methods into AppStack1 so parent-child path hierarchies stay together
+  // Keep ALL ApiGateway Resources and Methods in Root stack along with RestApi
   if (type === 'AWS::ApiGateway::Resource' || type === 'AWS::ApiGateway::Method') {
-    return { destination: 'AppStack1', force: true };
+    ejectFromNestedStack(this, logicalId);
+    return false;
   }
 
+  // LogGroups are stripped by RemoveLogGroupsPlugin before split-stacks runs.
+  // Handle Lambda functions, Permissions, and Rules across application stacks.
   if (
-    type === 'AWS::Logs::LogGroup' ||
     type === 'AWS::Lambda::Function' ||
     type === 'AWS::Lambda::Permission' ||
     type === 'AWS::Events::Rule'
