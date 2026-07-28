@@ -2,6 +2,7 @@ const { loginUser } = require('../../services/cognito.service');
 const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateEmail, validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { evaluatePolicyCompliance } = require('../../config/legalPolicies.config');
 
 exports.handler = async (event) => {
     try {
@@ -63,6 +64,9 @@ exports.handler = async (event) => {
         // Update last login timestamp
         await dynamoService.updateLastLogin(dbUser.userId);
 
+        // Evaluate policy compliance status
+        const compliance = evaluatePolicyCompliance(dbUser.policyConsent);
+
         // Return tokens and user information
         return response.success({
             message: 'Login successful',
@@ -82,6 +86,9 @@ exports.handler = async (event) => {
                 status: dbUser.status,
                 emailVerified: dbUser.emailVerified,
                 profileCompleted: dbUser.profileCompleted,
+                requiresPolicyAcceptance: !compliance.compliant,
+                policyConsent: dbUser.policyConsent || null,
+                marketingPreferences: dbUser.marketingPreferences || null,
                 lastLoginAt: new Date().toISOString()
             }
         });

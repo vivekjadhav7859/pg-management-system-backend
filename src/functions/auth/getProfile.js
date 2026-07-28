@@ -33,6 +33,9 @@ exports.handler = async (event) => {
             return response.error('Account is not active', 403);
         }
 
+        const { evaluatePolicyCompliance } = require('../../config/legalPolicies.config');
+        const compliance = evaluatePolicyCompliance(dbUser.policyConsent);
+
         return response.success({
             message: 'Profile retrieved successfully',
             user: {
@@ -45,6 +48,9 @@ exports.handler = async (event) => {
                 status: dbUser.status,
                 emailVerified: dbUser.emailVerified,
                 profileCompleted: dbUser.profileCompleted,
+                requiresPolicyAcceptance: !compliance.compliant,
+                policyConsent: dbUser.policyConsent || null,
+                marketingPreferences: dbUser.marketingPreferences || null,
                 lastLoginAt: dbUser.lastLoginAt,
                 createdAt: dbUser.createdAt,
                 updatedAt: dbUser.updatedAt,

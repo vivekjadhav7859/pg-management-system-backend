@@ -28,7 +28,7 @@ exports.getAccountCreatedTemplate = ({ name, email, dashboardUrl }) => {
         Your property management account associated with <strong>${escapeHtml(email)}</strong> has been initialized successfully.
       </p>
       
-      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; padding: 20px; border-radius: 8px; margin: 24px 0;">
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #16a34a; padding: 20px; border-radius: 8px; margin: 24px 0;">
         <h3 style="margin: 0 0 10px 0; font-size: 15px; font-weight: 600; color: #0f172a;">What's next?</h3>
         <ul style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.6;">
           <li>Add and configure your PG/Hostel properties, floors, and rooms.</li>
@@ -98,7 +98,7 @@ exports.getLoginOtpTemplate = ({ otpCode }) => {
       </p>
       
       <div style="background-color: #f1f5f9; border: 2px dashed #cbd5e1; padding: 24px; text-align: center; border-radius: 12px; margin: 28px 0;">
-        <span style="font-size: 36px; font-weight: 800; color: #4f46e5; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">${escapeHtml(otpCode)}</span>
+        <span style="font-size: 36px; font-weight: 800; color: #16a34a; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">${escapeHtml(otpCode)}</span>
       </div>
 
       <div style="background-color: #fffbeb; border: 1px solid #fef3c7; padding: 14px; border-radius: 6px; margin-bottom: 20px;">

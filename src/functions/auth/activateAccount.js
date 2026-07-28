@@ -13,15 +13,26 @@ exports.handler = async (event) => {
         console.log('Activate account request received');
 
         const body = JSON.parse(event.body || '{}');
-        const { token, id, password, name, phone, emergencyContact, termsAccepted } = body;
+        const { token, id, password, name, phone, emergencyContact, termsAccepted, policyConsent, marketingPreferences } = body;
 
-        const requiredValidation = validateRequiredFields(body, ['token', 'id', 'password', 'termsAccepted']);
+        const requiredValidation = validateRequiredFields(body, ['token', 'id', 'password']);
         if (!requiredValidation.valid) {
             return response.error(requiredValidation.message, 400);
         }
 
-        if (termsAccepted !== true && termsAccepted !== 'true') {
-            return response.error('You must accept the terms and conditions to activate your account', 400);
+        const { CURRENT_POLICY_VERSIONS } = require('../../config/legalPolicies.config');
+        const activePolicyConsent = policyConsent || {
+            privacyVersion: CURRENT_POLICY_VERSIONS.privacyVersion,
+            termsVersion: CURRENT_POLICY_VERSIONS.termsVersion,
+            userAgreementVersion: CURRENT_POLICY_VERSIONS.userAgreementVersion,
+            kycConsentVersion: CURRENT_POLICY_VERSIONS.kycConsentVersion,
+            dataProcessingVersion: CURRENT_POLICY_VERSIONS.dataProcessingVersion,
+            lastAcceptedAt: new Date().toISOString(),
+            acceptanceMethod: 'TENANT_ACTIVATION'
+        };
+
+        if (!termsAccepted && !policyConsent) {
+            return response.error('You must accept the legal terms and policies to activate your account', 400);
         }
 
         const passwordValidation = validatePassword(password);
@@ -99,7 +110,23 @@ exports.handler = async (event) => {
             lastLoginAt: timestamp
         });
 
-        // Set activation flags on User record
+        // Set activation flags & policy consent on User record
+        const clientIp = event.requestContext?.identity?.sourceIp || event.headers['X-Forwarded-For'] || 'N/A';
+        const userAgent = event.headers['User-Agent'] || event.headers['user-agent'] || 'N/A';
+        const mktPrefs = marketingPreferences || { emailMarketing: false, smsMarketing: false, whatsappMarketing: false };
+
+        await dynamoService.updateUserPolicyConsent(user.userId, activePolicyConsent, mktPrefs);
+        await dynamoService.logPolicyAcceptance({
+            userId: user.userId,
+            userEmail: user.email,
+            userType: user.userType,
+            acceptedPolicies: activePolicyConsent,
+            marketingPreferences: mktPrefs,
+            acceptedIp: clientIp,
+            userAgent: userAgent,
+            acceptanceMethod: 'TENANT_ACTIVATION'
+        });
+
         const AWS = require('aws-sdk');
         const dynamodb = new AWS.DynamoDB.DocumentClient();
         await dynamodb.update({

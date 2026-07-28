@@ -47,16 +47,16 @@ exports.logEmail = async ({ ownerId, tenantId, tenantEmail, type, subject, statu
 exports.delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 exports.getRentReminderTemplate = ({ tenantName, ownerName, propertyName, rentAmount, dueDate }) => {
-    const subject = `Rent Payment Reminder — ${propertyName}`;
+    const subject = `Rent Payment Reminder — ${propertyName} | GoBanqo`;
     const html = `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-  <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:30px;border-radius:12px 12px 0 0;text-align:center;">
-    <h1 style="color:#fff;margin:0;font-size:22px;">🔔 Rent Payment Reminder</h1>
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:30px;border-radius:12px 12px 0 0;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">🔔 Rent Payment Reminder</h1>
   </div>
   <div style="background:#fff;padding:30px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;">
     <p style="font-size:16px;color:#333;">Dear <strong>${tenantName}</strong>,</p>
-    <p style="font-size:15px;color:#555;">This is a friendly reminder that your monthly rent is due.</p>
-    <div style="background:#f0f0ff;border-left:4px solid #4f46e5;padding:16px;margin:20px 0;border-radius:4px;">
+    <p style="font-size:15px;color:#555;">This is a friendly reminder that your monthly rent is due for <strong>${propertyName}</strong>.</p>
+    <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px;margin:20px 0;border-radius:4px;">
       <p style="margin:6px 0;"><strong>Property:</strong> ${propertyName}</p>
       <p style="margin:6px 0;"><strong>Amount Due:</strong> ₹${Number(rentAmount).toLocaleString('en-IN')}</p>
       <p style="margin:6px 0;"><strong>Due Date:</strong> ${dueDate}</p>
@@ -64,21 +64,21 @@ exports.getRentReminderTemplate = ({ tenantName, ownerName, propertyName, rentAm
     <p style="font-size:14px;color:#777;">Please ensure timely payment to avoid any inconvenience.</p>
     <p style="font-size:14px;color:#333;margin-top:20px;">Thank you,<br/><strong>${propertyName} Management</strong></p>
     <hr style="margin:24px 0;border:none;border-top:1px solid #eee;"/>
-    <p style="font-size:11px;color:#aaa;text-align:center;">Sent on behalf of ${ownerName} via PG Manager</p>
+    <p style="font-size:11px;color:#aaa;text-align:center;">Sent on behalf of ${ownerName} via GoBanqo Enterprise Platform</p>
   </div>
 </div>`;
     return { subject, html };
 };
 
 exports.getWelcomeTemplate = ({ tenantName, ownerName, propertyName, ownerContact, rentAmount, rentDueDay, leaseEndDate, rules }) => {
-    const subject = `Welcome to ${propertyName} — PG Manager`;
+    const subject = `Welcome to ${propertyName} — GoBanqo`;
     const rulesHtml = rules && rules.length
         ? `<p style="margin:6px 0;"><strong>House Rules:</strong></p><ul style="margin:4px 0 0 16px;color:#555;">${rules.map(r => `<li style="margin:2px 0;">${r}</li>`).join('')}</ul>`
         : '';
     const html = `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-  <div style="background:linear-gradient(135deg,#10b981,#059669);padding:30px;border-radius:12px 12px 0 0;text-align:center;">
-    <h1 style="color:#fff;margin:0;font-size:22px;">🎉 Welcome to ${propertyName}!</h1>
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:30px;border-radius:12px 12px 0 0;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">🎉 Welcome to ${propertyName}!</h1>
   </div>
   <div style="background:#fff;padding:30px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;">
     <p style="font-size:16px;color:#333;">Dear <strong>${tenantName}</strong>,</p>
@@ -95,7 +95,7 @@ exports.getWelcomeTemplate = ({ tenantName, ownerName, propertyName, ownerContac
     <p style="font-size:14px;color:#777;">If you have any questions, please reach out to your property manager.</p>
     <p style="font-size:14px;color:#333;margin-top:20px;">Welcome aboard,<br/><strong>${propertyName} Management</strong></p>
     <hr style="margin:24px 0;border:none;border-top:1px solid #eee;"/>
-    <p style="font-size:11px;color:#aaa;text-align:center;">Sent on behalf of ${ownerName} via PG Manager</p>
+    <p style="font-size:11px;color:#aaa;text-align:center;">Sent on behalf of ${ownerName} via GoBanqo Enterprise Platform</p>
   </div>
 </div>`;
     return { subject, html };
@@ -104,15 +104,15 @@ exports.getWelcomeTemplate = ({ tenantName, ownerName, propertyName, ownerContac
 exports.getBroadcastTemplate = ({ ownerName, propertyName, customSubject, message }) => {
     const subject = customSubject;
     const html = `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-  <div style="background:linear-gradient(135deg,#0ea5e9,#0284c7);padding:30px;border-radius:12px 12px 0 0;text-align:center;">
-    <h1 style="color:#fff;margin:0;font-size:22px;">📢 Notice from ${propertyName}</h1>
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:linear-gradient(135deg,#16a34a,#15803d);padding:30px;border-radius:12px 12px 0 0;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">📢 Notice from ${propertyName}</h1>
   </div>
   <div style="background:#fff;padding:30px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;">
     <div style="font-size:15px;color:#333;white-space:pre-wrap;line-height:1.7;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
     <p style="font-size:14px;color:#333;margin-top:24px;">Regards,<br/><strong>${ownerName}</strong><br/>${propertyName}</p>
     <hr style="margin:24px 0;border:none;border-top:1px solid #eee;"/>
-    <p style="font-size:11px;color:#aaa;text-align:center;">Sent on behalf of ${ownerName} via PG Manager</p>
+    <p style="font-size:11px;color:#aaa;text-align:center;">Sent on behalf of ${ownerName} via GoBanqo Enterprise Platform</p>
   </div>
 </div>`;
     return { subject, html };

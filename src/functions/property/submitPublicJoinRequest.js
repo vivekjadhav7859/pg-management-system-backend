@@ -23,7 +23,7 @@ exports.handler = async (event) => {
 
         const body = JSON.parse(event.body || '{}');
         const {
-            name, email, phone, gender, dob, occupation, company,
+            name, email, phone, password, gender, dob, occupation, company,
             address, emergencyContact, stayDuration, kycDocuments,
             roomId, bedNumber
         } = body;
@@ -103,9 +103,25 @@ exports.handler = async (event) => {
         let existingUser = await dynamoService.getUserByEmail(sanitizedEmail);
         let tenantUserId;
         let isNewUser = false;
+        let passwordSetSuccessfully = false;
 
         if (existingUser) {
             tenantUserId = existingUser.userId;
+            if (password) {
+                try {
+                    await cognitoService.setUserPassword(sanitizedEmail, password);
+                    await cognitoService.updateUserAttributes(sanitizedEmail, [
+                        { Name: 'email_verified', Value: 'true' }
+                    ]);
+                    await dynamoService.updateUser(tenantUserId, {
+                        status: 'active',
+                        emailVerified: true
+                    });
+                    passwordSetSuccessfully = true;
+                } catch (pwErr) {
+                    console.warn('[submitPublicJoinRequest] Setting password for existing user warning:', pwErr.message);
+                }
+            }
         } else {
             isNewUser = true;
             tenantUserId = uuidv4();
@@ -122,6 +138,18 @@ exports.handler = async (event) => {
                 }
             }
 
+            if (password) {
+                try {
+                    await cognitoService.setUserPassword(sanitizedEmail, password);
+                    await cognitoService.updateUserAttributes(sanitizedEmail, [
+                        { Name: 'email_verified', Value: 'true' }
+                    ]);
+                    passwordSetSuccessfully = true;
+                } catch (pwErr) {
+                    console.warn('[submitPublicJoinRequest] Setting password for new user warning:', pwErr.message);
+                }
+            }
+
             const newUserItem = {
                 userId: tenantUserId,
                 cognitoUserId: tenantUserId,
@@ -129,8 +157,9 @@ exports.handler = async (event) => {
                 name: sanitizedName,
                 phoneNumber: sanitizedPhone,
                 userType: 'tenant',
-                status: 'pending_activation',
-                emailVerified: false,
+                status: passwordSetSuccessfully ? 'active' : 'pending_activation',
+                invitationStatus: passwordSetSuccessfully ? 'activated' : 'pending',
+                emailVerified: passwordSetSuccessfully,
                 profileCompleted: true,
                 createdAt: timestamp,
                 updatedAt: timestamp,
@@ -285,6 +314,7 @@ exports.handler = async (event) => {
             hasConflicts: conflictFlags.length > 0,
             conflictFlags,
             isNewUser,
+            passwordSet: Boolean(passwordSetSuccessfully),
         }, 201);
 
     } catch (err) {

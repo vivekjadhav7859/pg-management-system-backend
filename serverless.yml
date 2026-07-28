@@ -33,6 +33,7 @@ custom:
     custom: splits.js
 
 plugins:
+  - ./scripts/remove-log-groups-plugin.js
   - serverless-plugin-split-stacks
 
 provider:
@@ -40,10 +41,12 @@ provider:
   runtime: nodejs20.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
+  apiName: ${self:service}-${self:provider.stage}-v2
   deploymentBucket: ${env:DEPLOYMENT_BUCKET, 'serverless-framework-deployments-ap-south-1-5fca437e-9fb3'}
   # Keep functions on $LATEST. Publishing a version for every function adds one
   # CloudFormation resource each and pushes this stack past AWS's 500-resource limit.
   versionFunctions: false
+
 
   environment:
     STAGE: ${self:provider.stage}
@@ -62,6 +65,10 @@ provider:
     COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
     INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
     EMAIL_LOG_TABLE: ${self:service}-email-logs-${self:provider.stage}
+    POLICY_ACCEPTANCE_LOG_TABLE: ${self:service}-policy-logs-${self:provider.stage}
+    AUDIT_LOG_TABLE: ${self:service}-audit-logs-${self:provider.stage}
+    USER_CONSENT_TABLE: ${self:service}-user-consents-${self:provider.stage}
+    DATA_REQUEST_TABLE: ${self:service}-data-requests-${self:provider.stage}
     SUBSCRIPTION_TABLE: ${self:service}-subscriptions-${self:provider.stage}
     WEBHOOK_EVENT_TABLE: ${self:service}-webhook-events-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
@@ -138,6 +145,14 @@ provider:
             - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
             - !GetAtt EmailLogsTable.Arn
             - !Sub "${EmailLogsTable.Arn}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-policy-logs-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-policy-logs-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-audit-logs-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-audit-logs-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-user-consents-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-user-consents-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-data-requests-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-data-requests-${self:provider.stage}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}/index/*"
             - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}"
@@ -240,6 +255,31 @@ functions:
           method: post
           cors: *corsConfig
 
+  # ─── Legal & Policy Compliance ─────────────────────────────────────────────
+  getLatestPolicies:
+    handler: src/functions/auth/getLatestPolicies.handler
+    events:
+      - http:
+          path: auth/policies/latest
+          method: get
+          cors: *corsConfig
+
+  acceptPolicies:
+    handler: src/functions/auth/acceptPolicies.handler
+    events:
+      - http:
+          path: user/policy-acceptance
+          method: post
+          cors: *corsConfig
+
+  getPolicyHistory:
+    handler: src/functions/auth/getPolicyHistory.handler
+    events:
+      - http:
+          path: user/policy-acceptance/history
+          method: get
+          cors: *corsConfig
+
   # ─── Forgot Password ────────────────────────────────────────────────────────
   forgotPassword:
     handler: src/functions/auth/forgotPassword.handler
@@ -321,6 +361,72 @@ functions:
           method: put
           cors: *corsConfig
 
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ PRIVACY & SECURITY ENDPOINTS ============
+  getConsent:
+    handler: src/functions/privacy/getConsent.handler
+    events:
+      - http:
+          path: privacy/consent
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateConsent:
+    handler: src/functions/privacy/updateConsent.handler
+    events:
+      - http:
+          path: privacy/consent
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  exportData:
+    handler: src/functions/privacy/exportData.handler
+    events:
+      - http:
+          path: privacy/export-data
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  requestErasure:
+    handler: src/functions/privacy/requestErasure.handler
+    events:
+      - http:
+          path: privacy/request-erasure
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getAuditLogs:
+    handler: src/functions/security/getAuditLogs.handler
+    events:
+      - http:
+          path: security/audit-logs
+          method: get
+          cors: *corsConfig
           authorizer:
             name: authorizer
             resultTtlInSeconds: 0
@@ -606,7 +712,7 @@ functions:
             type: token
 
   checkInTenant:
-    handler: src/functions/tenant/inviteTenant.handler
+    handler: src/functions/tenant/checkInTenant.handler
     events:
       - http:
           path: tenants/check-in
@@ -1418,6 +1524,7 @@ resources:
 
     CognitoUserPoolIdentityProviderGoogle:
       Type: AWS::Cognito::UserPoolIdentityProvider
+      DeletionPolicy: Retain
       Properties:
         ProviderName: Google
         ProviderType: Google
@@ -1905,6 +2012,8 @@ resources:
     # Property Invite Codes Table
     PropertyInviteCodesTable:
       Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
       Properties:
         TableName: ${self:service}-property-invite-codes-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
@@ -1957,7 +2066,15 @@ resources:
           - Key: Service
             Value: ${self:service}
 
-    # Pre-existing in DynamoDB: SubscriptionsTable and WebhookEventsTable
+    # Pre-existing in DynamoDB: PolicyAcceptanceLogsTable, AuditLogsTable, UserConsentsTable, DataRequestsTable, SubscriptionsTable, WebhookEventsTable
+    # PolicyAcceptanceLogsTable:
+    #   Type: AWS::DynamoDB::Table
+    # AuditLogsTable:
+    #   Type: AWS::DynamoDB::Table
+    # UserConsentsTable:
+    #   Type: AWS::DynamoDB::Table
+    # DataRequestsTable:
+    #   Type: AWS::DynamoDB::Table
     # SubscriptionsTable:
     #   Type: AWS::DynamoDB::Table
     # WebhookEventsTable:

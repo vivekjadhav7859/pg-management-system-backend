@@ -22,13 +22,13 @@ exports.renderLayout = ({
         <tr>
           <td align="center">
             <!--[if mso]>
-            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${actionUrl}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="16%" stroke="f" fillcolor="#4f46e5">
+            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${actionUrl}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="16%" stroke="f" fillcolor="#16a34a">
               <w:anchorlock/>
               <center style="color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:bold;">${actionText}</center>
             </v:roundrect>
             <![endif]-->
             <!--[if !mso]><!-->
-            <a href="${actionUrl}" target="_blank" style="background-color: #4f46e5; background-image: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; display: inline-block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 48px; text-align: center; text-decoration: none; padding: 0 28px; min-width: 200px; -webkit-text-size-adjust: none; border-radius: 8px; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);">${actionText}</a>
+            <a href="${actionUrl}" target="_blank" style="background-color: #16a34a; background-image: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: #ffffff; display: inline-block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 48px; text-align: center; text-decoration: none; padding: 0 28px; min-width: 200px; -webkit-text-size-adjust: none; border-radius: 8px; box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);">${actionText}</a>
             <!--<![endif]-->
           </td>
         </tr>
@@ -62,7 +62,7 @@ exports.renderLayout = ({
       margin: 0 !important;
       padding: 0 !important;
       width: 100% !important;
-      background-color: #0f172a;
+      background-color: #0b131e;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
       -ms-text-size-adjust: 100%;
@@ -85,7 +85,7 @@ exports.renderLayout = ({
     .wrapper {
       width: 100%;
       table-layout: fixed;
-      background-color: #0f172a;
+      background-color: #0b131e;
       padding: 32px 12px 48px 12px;
     }
     .main-container {
@@ -97,22 +97,22 @@ exports.renderLayout = ({
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
     }
     .header-banner {
-      background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+      background: linear-gradient(135deg, #09131d 0%, #0e1b2a 100%);
       padding: 32px 28px;
       text-align: center;
-      border-bottom: 3px solid #4f46e5;
+      border-bottom: 3px solid #16a34a;
     }
     .brand-logo-mark {
       display: inline-block;
-      width: 44px;
-      height: 44px;
-      line-height: 44px;
-      background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+      width: 46px;
+      height: 46px;
+      line-height: 46px;
+      background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
       color: #ffffff;
       font-weight: 900;
       font-size: 24px;
       border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+      box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4);
       margin-bottom: 8px;
     }
     .brand-title {
@@ -123,7 +123,7 @@ exports.renderLayout = ({
       letter-spacing: -0.5px;
     }
     .brand-sub {
-      color: #a5b4fc;
+      color: #4ade80;
       font-size: 11px;
       margin-top: 4px;
       text-transform: uppercase;
@@ -149,7 +149,7 @@ exports.renderLayout = ({
     /* Dark Mode Media Queries */
     @media (prefers-color-scheme: dark) {
       body, .wrapper {
-        background-color: #090d16 !important;
+        background-color: #080f18 !important;
       }
       .main-container {
         background-color: #1e293b !important;
@@ -206,7 +206,7 @@ exports.renderLayout = ({
               <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
                 Secure Transactional System • Powered by GoBanqo Centralized Notification Platform
               </p>
-              ${showUnsubscribe ? `<p style="font-size: 11px; color: #94a3b8; margin-top: 6px;"><a href="https://gobanqo.com/notification-preferences" style="color: #4f46e5; text-decoration: underline;">Manage Notification Preferences</a></p>` : ''}
+              ${showUnsubscribe ? `<p style="font-size: 11px; color: #94a3b8; margin-top: 6px;"><a href="https://gobanqo.com/notification-preferences" style="color: #16a34a; text-decoration: underline;">Manage Notification Preferences</a></p>` : ''}
             </div>
           </div>
         </td>
