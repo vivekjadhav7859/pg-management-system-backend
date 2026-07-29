@@ -874,6 +874,34 @@ functions:
             identitySource: method.request.header.Authorization
             type: token
 
+  createCheckoutRequest:
+    handler: src/functions/tenant/createCheckoutRequest.handler
+    events:
+      - http:
+          path: tenant/checkout-request
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateTenantProfile:
+    handler: src/functions/tenant/updateTenantProfile.handler
+    events:
+      - http:
+          path: tenant/profile
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
   payRent:
     handler: src/functions/tenant/payRent.handler
     events:

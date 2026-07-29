@@ -2,28 +2,29 @@
 
 ## 1. Executive Summary & Architecture Overview
 
-The **GoBanqo PG Management System Backend** (`pg-management-system-backend`) is a multi-tenant, cloud-native enterprise backend built on top of AWS Serverless Framework v4. It powers property management, tenant onboarding, financial tracking, automated billing, complaint resolution, legal/privacy compliance (GDPR/DPDP), web push notifications, and prepaid subscription management for Paying Guest (PG) owners and tenants.
+The **GoBanqo PG Management System Backend** (`pg-management-system-backend`) is a multi-tenant, cloud-native enterprise backend built on top of AWS Serverless Framework v4. It powers property management, tenant onboarding, financial tracking, automated billing, complaint resolution, legal/privacy compliance (GDPR/DPDP), web push notifications, responsive email dispatch, and prepaid subscription management for Paying Guest (PG) owners and tenants.
 
 ### Core Architectural Stack
 - **Compute & Serverless Core**: AWS Lambda (Node.js 20.x runtime, bundled via `esbuild`), Serverless Framework v4.40.
-- **API Gateway & Routing**: AWS API Gateway REST APIs with custom Bearer Token Lambda Authorizer (`src/functions/auth/authorizer.js`).
-- **Authentication & Identity**: AWS Cognito User Pools (Multi-role: `owner`, `tenant`, `admin`), with automated custom email/SMS verification and pre-signup triggers.
+- **API Gateway & Routing**: AWS API Gateway REST APIs (`ApiGatewayRestApiV2`) with custom Bearer Token Lambda Authorizer (`src/functions/auth/authorizer.js`).
+- **CloudFormation Build Plugins**: `RemoveLogGroupsPlugin` (`scripts/remove-log-groups-plugin.js`) for automated template cleanup, LogGroup stripping, fixed FunctionName removal for nested stack functions, and API Gateway REST API migration.
+- **Authentication & Identity**: AWS Cognito User Pools (Multi-role: `owner`, `tenant`, `admin`), with automated custom email verification, custom message triggers, and pre-signup triggers.
 - **Database & Persistence**: AWS DynamoDB (Pay-Per-Request / On-Demand billing mode), with Global Secondary Indexes (GSIs), Point-in-Time Recovery (PITR), and DynamoDB Streams.
 - **Object Storage & Encryption**: AWS S3 (KYC documents, property image uploads) with KMS envelope encryption (`AWS::KMS::Key`).
 - **Payments & Subscriptions**: Razorpay Payment Gateway integration (orders, webhooks, signature verification) supporting 30-day trial and tiered annual subscription plans (Basic, Silver, Gold, Platinum).
-- **Notifications**: AWS SES (Simple Email Service) with DKIM/SPF verification and Web Push (VAPID key-pair push notifications).
-- **Infrastructure as Code & Stack Splitting**: Customized `serverless-plugin-split-stacks` (`splits.js`) distributing 550+ AWS CloudFormation resources across 4 domain-isolated nested stacks + 1 Root stack to prevent AWS CloudFormation 500-resource limits.
+- **Notifications & Email Rendering**: AWS SES (Simple Email Service) with DKIM/SPF verification, VAPID Web Push notifications, and responsive HTML email templates with dynamic action buttons.
+- **Infrastructure as Code & Stack Splitting**: Customized `serverless-plugin-split-stacks` (`splits.js`) distributing 101 AWS Lambda functions across 4 domain-isolated nested application stacks + 1 Root stack to prevent AWS CloudFormation 500-resource limits.
 
 ---
 
 ## 2. Infrastructure as Code & CloudFormation Stack Architecture
 
-To overcome AWS CloudFormation's 500-resource limit per stack, the project utilizes `serverless-plugin-split-stacks` with custom routing logic defined in `splits.js`.
+To overcome AWS CloudFormation's 500-resource limit per stack, the project utilizes `serverless-plugin-split-stacks` with custom domain-routing logic defined in `splits.js` paired with `RemoveLogGroupsPlugin`.
 
 ```
                             ┌─────────────────────────────────────────────────┐
                             │                   Root Stack                    │
-                            │  • API Gateway REST API & Deployments           │
+                            │  • ApiGateway REST API & Resources (V2)         │
                             │  • Cognito User Pool & Client                   │
                             │  • Custom Lambda Authorizer                     │
                             │  • IAM Roles & Execution Policies               │
@@ -34,21 +35,21 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
          ▼                      ▼                                         ▼                      ▼
 ┌──────────────────┐  ┌──────────────────┐                     ┌──────────────────┐  ┌──────────────────┐
 │   AppStack0      │  │   AppStack1      │                     │   AppStack2      │  │   AppStack3      │
-│ (Auth & Privacy) │  │(Property, Rooms &│                     │(Tenant & Requests)│  │ (Financials &    │
-│                  │  │   ApiGateway)    │                     │                  │  │  Subscriptions)  │
-│ • 22 Functions   │  │ • 21 Functions   │                     │ • 21 Functions   │  │ • 29 Functions   │
-│ • User Profiles  │  │ • ApiGateway Path│                     │ • Tenant Check-In│  │ • Rent Collection│
-│ • Policy Audit   │  │   Resources      │                     │ • Tenant Portal  │  │ • Expenses       │
-│ • GDPR/DPDP      │  │ • Room & Property│                     │ • Requests/KYC   │  │ • Razorpay Sub.  │
-│ • 5 Parameters   │  │ • Image Upload   │                     │ • 5 Parameters   │  │ • 5 Parameters   │
+│ (Auth & Privacy) │  │(Properties & Rooms│                     │(Tenant Operations│  │ (Financials &    │
+│                  │  │ & Image Uploads) │                     │   & Requests)    │  │  Subscriptions)  │
+│ • 22 Functions   │  │ • 21 Functions   │                     │ • 23 Functions   │  │ • 29 Functions   │
+│ • User Profiles  │  │ • Property CRUD  │                     │ • Tenant Check-In│  │ • Rent Collection│
+│ • Policy Audit   │  │ • Room & Bed     │                     │ • Tenant Portal  │  │ • Expenses       │
+│ • GDPR/DPDP      │  │ • Image Upload   │                     │ • Requests/KYC   │  │ • Razorpay Sub.  │
+│ • Admin Tools    │  │ • Public Invites │                     │ • Checkout/Profile│  │ • Web Notifications│
 └──────────────────┘  └──────────────────┘                     └──────────────────┘  └──────────────────┘
 ```
 
 ### Stack Routing Rules (`splits.js`)
-- **Root Stack**: Authorizer, RestApi, Deployment, IAM Roles, DynamoDB Tables, Cognito User Pool, S3 Buckets, KMS Keys, and Cron Background Jobs (`scheduledRentReminder`, `generateMonthlyBills`, `onTenantCreated`).
-- **AppStack0 (Auth, Privacy & Legal)**: 22 Functions. User Signup, Login, Password Reset, Policy Compliance, Audit Logs, GDPR Consent & Data Erasure (`/auth/*`, `/privacy/*`, `/consent/*`).
-- **AppStack1 (Properties, Rooms & ApiGateway Routes)**: 21 Functions & API Gateway Route Resources. Property CRUD, Room Configuration, Bed Allocation, Image Upload URLs, Public Join Link validation (`/properties/*`, `/rooms/*`, `/upload/*`, `/invite-code/*`).
-- **AppStack2 (Tenant & Request Operations)**: 21 Functions. Tenant Onboarding, Check-In/Check-Out, Agreement Signing, KYC Verification, Requests, Complaints (`/tenants/*`, `/tenant/*`, `/requests/*`, `/complaints/*`).
+- **Root Stack**: Authorizer, RestApi (`ApiGatewayRestApiV2`), API Gateway Resources & Methods, Deployment, IAM Roles, DynamoDB Tables, Cognito User Pool, S3 Buckets, KMS Keys, and 5 Background Cron/Trigger Jobs (`scheduledRentReminder`, `generateMonthlyBills`, `onTenantCreated`, `cognitoPreSignUp`, `cognitoCustomMessage`).
+- **AppStack0 (Auth, Privacy & Legal)**: 22 Functions. User Signup, Login, Password Reset, Policy Compliance, Audit Logs, GDPR Consent & Data Erasure (`/auth/*`, `/privacy/*`, `/consent/*`, `/admin/*`).
+- **AppStack1 (Properties, Rooms & Public Invites)**: 21 Functions. Property CRUD, Room Configuration, Bed Allocation, Image Upload Presigned URLs, Public Join Link validation (`/properties/*`, `/rooms/*`, `/upload/*`, `/invite-code/*`).
+- **AppStack2 (Tenant & Request Operations)**: 23 Functions. Tenant Onboarding, Check-In/Check-Out, Agreement Signing, KYC Verification, Requests, Complaints, Tenant Dashboard, Tenant Profile Updates (`updateTenantProfile`), and Tenant Move-Out Requests (`createCheckoutRequest`) (`/tenants/*`, `/tenant/*`, `/requests/*`, `/complaints/*`, `/kyc/*`, `/agreement/*`).
 - **AppStack3 (Financials, Subscriptions & Notifications)**: 29 Functions. Owner Rent Billing, Expense Tracking, Razorpay Subscriptions, SES Email Events, Web Push (`/subscriptions/*`, `/financial/*`, `/notifications/*`, `/search/*`).
 
 ---
@@ -59,8 +60,8 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 
 | File Name | Location | Description & Responsibilities |
 |-----------|----------|--------------------------------|
-| `serverless.yml` | `serverless.yml` | Core Serverless Framework specification (2197 lines). Defines 99+ Lambda functions, HTTP routes, CORS configurations, IAM execution roles, DynamoDB table schemas, S3 bucket settings, and KMS keys. |
-| `splits.js` | `splits.js` | Custom CloudFormation stack splitting engine. Categorizes functions, log groups, and permissions into 4 nested stacks based on domain keywords to prevent cross-stack circular dependencies. |
+| `serverless.yml` | `serverless.yml` | Core Serverless Framework specification (2231 lines). Defines 101 Lambda functions, HTTP routes, CORS configurations, IAM execution roles, DynamoDB table schemas, S3 bucket settings, KMS keys, and custom plugins (`remove-log-groups-plugin.js`, `serverless-plugin-split-stacks`). |
+| `splits.js` | `splits.js` | Custom CloudFormation stack splitting engine. Categorizes functions, permissions, and rules into 4 nested stacks based on domain keywords to prevent cross-stack circular dependencies, while keeping API Gateway resources in Root. |
 | `package.json` | `package.json` | Node.js project manifest. Lists runtime dependencies (`@aws-sdk/client-cognito-identity-provider`, `aws-sdk`, `nodemailer`, `web-push`, `uuid`) and build dependencies (`serverless`, `serverless-esbuild`, `serverless-plugin-split-stacks`). |
 
 ---
@@ -79,6 +80,8 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 
 | Script Name | Purpose | Key Commands / Behavior |
 |-------------|---------|-------------------------|
+| `remove-log-groups-plugin.js` | `scripts/remove-log-groups-plugin.js` | Serverless Framework custom plugin. Strips explicit `AWS::Logs::LogGroup` resources, removes fixed `FunctionName` properties from nested Lambda functions (enabling CFN auto-naming to eliminate stack deadlock conflicts), renames `ApiGatewayRestApi` -> `ApiGatewayRestApiV2`, and cleans up empty RestApi policies and `DependsOn` dependencies. |
+| `cleanup-orphaned-appstack3.js` | `scripts/cleanup-orphaned-appstack3.js` | Automated resource cleanup tool. Scans AWS account for orphaned Lambda functions and CloudWatch Log Groups left by failed deployments across AppStack0, AppStack2, and AppStack3, deleting them to resolve "Resource name conflict" deployment errors. |
 | `verify-lambdas.js` | `scripts/verify-lambdas.js` | Post-deploy safety net. Inspects deployed Lambda code sizes via AWS CLI (`CodeSize`). Detects broken zips (< 2KB) and automatically re-bundles with `esbuild` and updates function code. |
 | `prune-lambda-versions.js` | `scripts/prune-lambda-versions.js` | AWS Lambda maintenance script. Deletes old, unused Lambda version revisions to keep AWS storage within account limits (retains last 3 versions). |
 | `verify-deployment.js` | `scripts/verify-deployment.js` | Pre/post-flight check verifying AWS credentials, CloudFormation stack statuses, DynamoDB table access, and S3 bucket availability. |
@@ -91,9 +94,9 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 
 | Service File | Responsibilities | Key Exported Methods |
 |--------------|------------------|----------------------|
-| `dynamodb.service.js` | `src/services/dynamodb.service.js` | Low-level DynamoDB DocumentClient wrapper with retry logic, transaction helper (`transactWrite`), batch get/write, and query abstraction. | `get`, `put`, `update`, `delete`, `query`, `scan`, `transactWrite` |
+| `dynamodb.service.js` | `src/services/dynamodb.service.js` | Low-level DynamoDB DocumentClient wrapper with retry logic, transaction helper (`transactWrite`), batch get/write, and query abstraction. | `get`, `put`, `update`, `delete`, `query`, `scan`, `transactWrite`, `getUserById` |
 | `cognito.service.js` | `src/services/cognito.service.js` | AWS Cognito Identity Provider integration. Handles admin user creation, password changes, group assignments, user disabling, and attribute updates. | `createInvitedUser`, `getUserDetails`, `adminUpdateUserAttributes`, `disableUser` |
-| `tenant.service.js` | `src/services/tenant.service.js` | High-level tenant business logic: check-in transaction, bed assignment validation, checkout calculations, room status updates, KYC upload status. | `createTenant`, `getTenantById`, `getTenantsByProperty`, `updateTenant`, `checkOutTenant`, `migrateTenant` |
+| `tenant.service.js` | `src/services/tenant.service.js` | High-level tenant business logic: check-in transaction, bed assignment validation, checkout calculations, room status updates, KYC upload status. | `createTenant`, `getTenantById`, `getTenantByUserId`, `getTenantsByProperty`, `updateTenant`, `checkOutTenant`, `migrateTenant` |
 | `property.service.js` | `src/services/property.service.js` | Property & Room management: creating properties, adding rooms, bulk room generation, calculating room occupancy, invite code generation. | `createProperty`, `getPropertiesByOwner`, `getPropertyById`, `addRoom`, `bulkAddRooms`, `updateRoom` |
 | `financial.service.js` | `src/services/financial.service.js` | Financial operations: rent collection, bill generation, expense tracking, income vs expense reporting, due rent reminder calculations. | `createRentPayment`, `getRentPayments`, `updateRentPayment`, `addExpense`, `getFinancialReport` |
 | `subscription.service.js` | `src/services/subscription.service.js` | Prepaid subscription engine: trial activation, Razorpay checkout order creation (`Razorpay API`), webhook signature verification, plan quota enforcement. | `getSubscriptionStatus`, `startTrial`, `createCheckoutOrder`, `verifyPaymentSignature`, `handleWebhook` |
@@ -112,8 +115,8 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 | `notificationProvider` | `src/providers/notificationProvider.js` | Unified entry point for dispatching notifications across channels (email & push). |
 | `sesProvider` | `src/providers/email/sesProvider.js` | AWS SES interface for sending transactional emails with HTML body rendering. |
 | `webPushProvider` | `src/providers/push/webPushProvider.js` | `web-push` library wrapper utilizing VAPID keys for browser push notifications. |
-| `emailTemplates` | `src/templates/emailTemplates.js` | Dynamic HTML email template definitions (welcome, invitation, rent reminder, complaint update). |
-| `templateRenderer` | `src/templates/templateRenderer.js` | String interpolation engine replacing handle placeholders (`{{tenantName}}`, `{{dueDate}}`, etc.). |
+| `emailTemplates` | `src/templates/emailTemplates.js` | Dynamic responsive HTML email templates (Welcome, Invitation/Activation, Complaint Status, Rent Reminders, Owner Request Alerts) styled with modern CSS cards, gradients, and CTA buttons. |
+| `templateRenderer` | `src/templates/templateRenderer.js` | Flexible string interpolation engine rendering template parameters (`{{tenantName}}`, `{{activationUrl}}`, `{{dueDate}}`, etc.) with fallback handling. |
 
 ---
 
@@ -122,15 +125,15 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 | Utility File | Purpose & Functions |
 |--------------|---------------------|
 | `response.js` | `src/utils/response.js` | Formats standard API Gateway HTTP responses (`200 OK`, `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `500 Error`) with CORS headers. |
-| `validator.js` | `src/utils/validator.js` | Input validation helpers for email syntax, phone numbers, mandatory field presence, and regex string sanitization. |
+| `validator.js` | `src/utils/validator.js` | Input validation helpers for email syntax, phone numbers, mandatory field presence, and regex string sanitization (`sanitizeInput`). |
 | `crypto.js` | `src/utils/crypto.js` | Cryptographic token generator (`crypto.randomBytes`) and SHA-256 token hashing for tenant invitation links. |
 | `subscriptionGuard.js` | `src/utils/subscriptionGuard.js` | Middleware guard evaluating owner subscription active status and property allocation limits before allowing write actions. |
 | `dateFormat.js` | `src/utils/dateFormat.js` | ISO-8601 string formatting, date difference calculation, and payment billing cycle month string utilities. |
 | `roomNamingEngine.js` | `src/utils/roomNamingEngine.js` | Algorithmic room & bed identifier generator for bulk room creation wizard. |
-| `emailHelper.js` | `src/utils/emailHelper.js` | Formats custom mail headers and DKIM parameters. |
+| `emailHelper.js` | `src/utils/emailHelper.js` | Formats custom mail headers, DKIM parameters, and AWS SES transmission wrappers. |
+| `ownerRequestEmail.js` | `src/utils/ownerRequestEmail.js` | Constructs structured HTML email notifications for property owners when tenants submit maintenance or checkout requests. |
 | `propertyImages.js` | `src/utils/propertyImages.js` | S3 presigned URL generator for property image uploads with file size restrictions. |
 | `tenantJoinRequest.js` | `src/utils/tenantJoinRequest.js` | Normalizes public tenant join requests into pending approval records. |
-| `ownerRequestEmail.js` | `src/utils/ownerRequestEmail.js` | Constructs email notifications for owners when a tenant submits a maintenance request. |
 | `expiredLinkAlert.js` | `src/utils/expiredLinkAlert.js` | Handles response formatting for expired invitation or activation links. |
 | `constants.js` | `src/utils/constants.js` | System-wide status enums, default pagination limits, and user role constants. |
 
@@ -138,7 +141,7 @@ To overcome AWS CloudFormation's 500-resource limit per stack, the project utili
 
 ### 3.7 Function Handlers (`src/functions/`)
 
-The 99 Lambda function handlers are organized by domain under `src/functions/`:
+The 101 Lambda function handlers are organized by domain under `src/functions/`:
 
 #### 1. Authentication & Security (`src/functions/auth/`, `src/functions/security/`)
 - `authorizer.js`: Custom API Gateway token authorizer verifying JWT / DB user context.
@@ -171,11 +174,13 @@ The 99 Lambda function handlers are organized by domain under `src/functions/`:
 - `generateInviteCode.js`, `getInviteCode.js`, `validateInviteCode.js`: Management of property join codes.
 - `getPublicPropertyInvite.js`, `getPublicAvailableRooms.js`, `submitPublicJoinRequest.js`: Public-facing tenant join portal.
 
-#### 4. Tenant Operations & Onboarding (`src/functions/tenant/`)
-- `inviteTenant.js`: Sends invitation email to prospective tenant with secure activation token.
-- `checkInTenant.js`: Formally checks in tenant, assigns room/bed, and generates initial rent record.
+#### 4. Tenant Operations & Portal (`src/functions/tenant/`)
+- `inviteTenant.js`: Sends invitation email to prospective tenant with secure activation token using dynamic `FRONTEND_URL`.
 - `resendInvitation.js`: Re-issues activation token email for pending tenants.
+- `checkInTenant.js`: Formally checks in tenant, assigns room/bed, and generates initial rent record.
 - `getTenants.js`, `getTenantById.js`, `updateTenant.js`: Tenant profile management.
+- `updateTenantProfile.js`: `POST /tenant/profile` — Updates tenant profile details (gender, DOB, occupation, address, emergency contact, profile photo) and calculates completion score.
+- `createCheckoutRequest.js`: `POST /tenant/checkout-request` — Submits tenant move-out request with planned dates, notice given flag, reason, owner notification email, and database log.
 - `checkOutTenant.js`: Processes tenant check-out, releases bed allocation, and calculates deposit refund.
 - `migrateTenant.js`: Transfers tenant from one room/bed to another within the property.
 - `uploadKYC.js`: Presigned URL creation for tenant identity document uploads (Aadhaar/PAN/Passport).
@@ -186,11 +191,11 @@ The 99 Lambda function handlers are organized by domain under `src/functions/`:
 - `payRent.js`: Tenant self-service rent payment confirmation.
 - `savePushSubscription.js` & `deletePushSubscription.js`: Web Push subscription registration.
 - `linkTenantProperty.js`: Associates an existing tenant account with a property.
-- `getTenantDashboard.js`: Aggregated summary dashboard for logged-in tenants.
+- `getTenantDashboard.js`: Aggregated summary dashboard for logged-in tenants including active lease, property notice period, agreement status, and pending checkout requests.
 
 #### 5. Requests & Complaints (`src/functions/requests/`, `src/functions/complaints/`)
 - `getRequests.js`, `updateRequestStatus.js`, `bulkApproveRequests.js`, `bulkDeleteRequests.js`: Management of tenant join and maintenance requests.
-- `createComplaint.js`, `getComplaints.js`, `updateComplaintStatus.js`: Resolution ticket workflow for tenant issues.
+- `createComplaint.js`, `getComplaints.js`, `updateComplaintStatus.js`: Resolution ticket workflow for tenant issues with automated owner notifications.
 
 #### 6. Financial Management & Billing (`src/functions/financial/`)
 - `collectRent.js`: Owner endpoint to manually record offline rent receipts.
@@ -214,7 +219,7 @@ The 99 Lambda function handlers are organized by domain under `src/functions/`:
 - `getNotificationLogs.js`: System delivery log viewer.
 - `sesEventHandler.js`: Webhook listener for SES email delivery bounces and complaints.
 - `getVapidPublicKey.js`: Returns public VAPID key for Web Push client subscription.
-- `onTenantCreated.js`: Background event handler dispatching welcome notifications upon tenant creation.
+- `onTenantCreated.js`: Background event handler dispatching welcome notifications with activation links upon tenant creation.
 - `broadcastEmail.js`: Admin/Owner endpoint for sending bulk email announcements.
 - `globalSearch.js`: Multi-entity search engine (`src/functions/search/globalSearch.js`).
 
@@ -225,4 +230,5 @@ The 99 Lambda function handlers are organized by domain under `src/functions/`:
 To maintain production stability, run the following commands:
 - **Build Packaging Test**: `npx serverless package --stage dev`
 - **Lambda Size Integrity Check**: `node scripts/verify-lambdas.js --stage dev`
+- **Orphaned Resource Cleanup Check**: `node scripts/cleanup-orphaned-appstack3.js --stage dev --dry-run`
 - **Unit & Service Tests**: `npm test`

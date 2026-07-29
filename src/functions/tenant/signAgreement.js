@@ -19,10 +19,19 @@ exports.handler = async (event) => {
         }
 
         const signedAt = new Date().toISOString();
+        const clientIp = event.requestContext?.identity?.sourceIp || event.headers?.['x-forwarded-for'] || event.headers?.['X-Forwarded-For'] || 'unknown';
+        const userAgent = event.headers?.['user-agent'] || event.headers?.['User-Agent'] || 'unknown';
+        const agreementVersion = body.agreementVersion || 'v1.0';
+        const documentId = body.documentId || `AGR-${tenant.propertyId || 'PROP'}-${tenant.tenantId.substring(0, 8).toUpperCase()}`;
+
         const updated = await tenantService.updateTenant(tenant.tenantId, {
             agreementStatus: 'signed',
             agreementSignedAt: signedAt,
             agreementAcceptedBy: dbUser.userId,
+            agreementIp: clientIp,
+            agreementUserAgent: userAgent,
+            agreementVersion,
+            documentId,
         });
 
         return response.success({

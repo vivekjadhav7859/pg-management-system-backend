@@ -97,6 +97,9 @@ exports.handler = async (event) => {
                 bedNumber: tenant.bedNumber,
                 rentAmount: tenant.rentAmount,
                 activationUrl,
+                onboardingUrl: activationUrl,
+                loginUrl: `${frontendUrl}/login`,
+                frontendUrl,
                 expiresHours: 2160
             },
             idempotencyKey: `RESEND#${tenant.tenantId}#${timestamp}`

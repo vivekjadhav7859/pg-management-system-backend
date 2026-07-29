@@ -72,16 +72,38 @@ exports.handler = async (event) => {
             return response.error('Property not found', 404);
         }
 
+        let addressStr = '';
+        let cityStr = typeof property.city === 'string' ? property.city : '';
+        let stateStr = typeof property.state === 'string' ? property.state : '';
+        let pincodeStr = typeof property.pincode === 'string' ? property.pincode : (typeof property.pincode === 'number' ? String(property.pincode) : '');
+
+        if (typeof property.address === 'string') {
+            addressStr = property.address;
+        } else if (property.address && typeof property.address === 'object') {
+            const parts = [
+                property.address.street || property.address.addressLine1 || property.address.address || property.address.line1,
+                property.address.addressLine2 || property.address.line2 || property.address.area,
+            ].filter((p) => typeof p === 'string' && p.trim().length > 0);
+            
+            addressStr = parts.join(', ');
+            if (!cityStr && property.address.city && typeof property.address.city === 'string') cityStr = property.address.city;
+            if (!stateStr && property.address.state && typeof property.address.state === 'string') stateStr = property.address.state;
+            if (!pincodeStr && (property.address.pincode || property.address.zip)) {
+                const pVal = property.address.pincode || property.address.zip;
+                pincodeStr = typeof pVal === 'string' ? pVal : String(pVal);
+            }
+        }
+
         // 3. Return sanitized public metadata
         return response.success({
             valid: true,
             code: invite.code,
             propertyId: property.propertyId,
             propertyName: property.propertyName,
-            address: property.address || '',
-            city: property.city || '',
-            state: property.state || '',
-            pincode: property.pincode || '',
+            address: addressStr || '',
+            city: cityStr || '',
+            state: stateStr || '',
+            pincode: pincodeStr || '',
             propertyType: property.propertyType || property.type || 'Co-live', // Boys / Girls / Co-live
             amenities: property.amenities || [],
             rules: property.rules || [],
