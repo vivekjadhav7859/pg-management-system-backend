@@ -96,6 +96,24 @@ exports.handler = async (event) => {
     } catch (err) {
         console.error('Login error:', err);
 
+        // Check if user exists but account is pending invitation activation
+        if (event.body) {
+            try {
+                const body = JSON.parse(event.body);
+                if (body.email) {
+                    const sanitizedEmail = body.email.toLowerCase().trim();
+                    const checkUser = await dynamoService.getUserByEmail(sanitizedEmail);
+                    if (checkUser && (checkUser.status === 'pending_activation' || checkUser.invitationStatus === 'sent')) {
+                        return response.error(
+                            'Your account is pending activation. Please check your invitation email or use the activation link provided by your property manager.',
+                            403,
+                            { code: 'ACCOUNT_PENDING_ACTIVATION', email: sanitizedEmail }
+                        );
+                    }
+                }
+            } catch (_) {}
+        }
+
         // Return generic error for security (don't reveal if user exists)
         return response.error('Invalid credentials', 401);
     }

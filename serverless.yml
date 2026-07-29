@@ -72,7 +72,7 @@ provider:
     SUBSCRIPTION_TABLE: ${self:service}-subscriptions-${self:provider.stage}
     WEBHOOK_EVENT_TABLE: ${self:service}-webhook-events-${self:provider.stage}
     KMS_KEY_ID: !Ref SmtpCredentialsKey
-    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
+    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@gobanqo.com'}
     SES_REGION: ${self:provider.region}
     ALLOWED_CORS_ORIGINS: https://gobanqo.com,https://www.gobanqo.com,https://dm2ue9mo1yuef.cloudfront.net,http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000
     SUBSCRIPTION_TRIAL_DAYS: ${env:SUBSCRIPTION_TRIAL_DAYS, '30'}
