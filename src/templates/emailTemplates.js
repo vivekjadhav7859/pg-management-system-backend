@@ -48,7 +48,7 @@ exports.getAccountCreatedTemplate = ({ name, email, dashboardUrl }) => {
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: dashboardUrl || 'https://gobanqo.com/login', 
+            actionUrl: dashboardUrl || (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/login` : 'http://localhost:5173/login'), 
             actionText: 'Access Your Dashboard', 
             footerText: 'GoBanqo Account & Security Platform' 
         }) 
@@ -81,7 +81,7 @@ exports.getEmailVerifiedTemplate = ({ name }) => {
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/login', 
+            actionUrl: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/login` : 'http://localhost:5173/login', 
             actionText: 'Log In Now', 
             footerText: 'GoBanqo Identity Services' 
         }) 
@@ -171,13 +171,14 @@ exports.getPasswordChangedTemplate = ({ name }) => {
         </p>
       </div>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/support` : 'http://localhost:5173/support';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/support', 
+            actionUrl: targetUrl, 
             actionText: 'Contact Support', 
             footerText: 'GoBanqo Security Platform' 
         }) 
@@ -189,7 +190,7 @@ exports.getPasswordChangedTemplate = ({ name }) => {
 // ==========================================
 
 exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, roomNumber, bedNumber, rentAmount, activationUrl, expiresHours = 2160, frontendUrl }) => {
-    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'https://gobanqo.com';
+    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
     const targetActionUrl = activationUrl || `${baseFrontend}/activate`;
     const displayOwnerName = ownerName || propertyName || 'Property Owner';
 
@@ -266,7 +267,7 @@ exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({
     const subject = `🎉 Welcome to ${propertyName} — GoBanqo`;
     const preheader = `Welcome aboard to ${propertyName}! Here are your residency and room details.`;
 
-    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'https://gobanqo.com';
+    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
     const targetActionUrl = activationUrl || onboardingUrl || loginUrl || `${baseFrontend}/login`;
     const actionBtnText = (activationUrl || onboardingUrl) ? 'Activate Account & Set Password' : 'Log In to Tenant App';
 
@@ -322,7 +323,7 @@ exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({
 };
 
 exports.getTenantAssignedTemplate = ({ tenantName, propertyName, roomNumber, bedNumber, moveInDate, loginUrl, frontendUrl }) => {
-    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'https://gobanqo.com';
+    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
     const targetActionUrl = loginUrl || `${baseFrontend}/login`;
 
     const subject = `🏠 Room Allocation Confirmed — ${propertyName}`;
@@ -428,13 +429,14 @@ exports.getRentReminderTemplate = ({ tenantName, ownerName, propertyName, roomNu
     `;
 
     const footerText = `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'Pay Rent / View Details', 
             footerText 
         }) 
@@ -467,13 +469,14 @@ exports.getOverdueReminderTemplate = ({ tenantName, ownerName, propertyName, roo
     `;
 
     const footerText = `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'Settle Payment Now', 
             footerText 
         }) 
@@ -513,13 +516,14 @@ exports.getPaymentReceiptTemplate = exports.getPaymentReceivedTemplate = ({ tena
     `;
 
     const footerText = `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'View Full Receipt', 
             footerText 
         }) 
@@ -541,13 +545,14 @@ exports.getPaymentFailedTemplate = ({ tenantName, propertyName, rentAmount, reas
       
       <p style="font-size: 14px; color: #475569;">Please retry using an alternative payment method or contact management.</p>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'Retry Payment', 
             footerText: 'GoBanqo Billing Platform' 
         }) 
@@ -604,13 +609,14 @@ exports.getComplaintCreatedTemplate = exports.getTenantRequestAlertTemplate = ({
     `;
 
     const footerText = `GoBanqo Maintenance Ticket System`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/complaints` : 'http://localhost:5173/complaints';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/complaints', 
+            actionUrl: targetUrl, 
             actionText: 'Review Maintenance Ticket', 
             footerText 
         }) 
@@ -630,13 +636,14 @@ exports.getComplaintUpdatedTemplate = ({ tenantName, propertyName, requestTitle,
         <p style="margin: 0; color: #0369a1; font-size: 14px;"><strong>Manager Notes:</strong> ${escapeHtml(resolutionNotes)}</p>
       </div>` : ''}
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'View Ticket Status', 
             footerText: `Sent on behalf of ${escapeHtml(propertyName)}` 
         }) 
@@ -666,13 +673,14 @@ exports.getPlanChangedTemplate = ({ ownerName, planName, propertyLimit }) => {
         <p style="margin: 4px 0; font-size: 14px; color: #0f172a;"><strong>Property Capacity:</strong> ${propertyLimit || 'Unlimited'}</p>
       </div>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/subscription` : 'http://localhost:5173/subscription';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/subscription', 
+            actionUrl: targetUrl, 
             actionText: 'Manage Subscription', 
             footerText: 'GoBanqo Subscription Platform' 
         }) 
@@ -693,13 +701,14 @@ exports.getTrialEndingTemplate = ({ ownerName, daysRemaining, upgradeUrl }) => {
         </p>
       </div>
     `;
+    const targetUrl = upgradeUrl || (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/subscription` : 'http://localhost:5173/subscription');
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: upgradeUrl || 'https://gobanqo.com/subscription', 
+            actionUrl: targetUrl, 
             actionText: 'Upgrade Plan Now', 
             footerText: 'GoBanqo Subscription Platform' 
         }) 
@@ -747,13 +756,14 @@ exports.getOwnerDailySummaryTemplate = ({ ownerName, totalProperties, activeTena
         </table>
       </div>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/dashboard` : 'http://localhost:5173/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'View Owner Dashboard', 
             footerText: 'GoBanqo Portfolio Analytics Platform' 
         }) 

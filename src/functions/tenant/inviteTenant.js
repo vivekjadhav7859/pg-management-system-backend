@@ -368,7 +368,7 @@ exports.handler = async (event) => {
         } catch (_) {}
 
         // Dispatch Welcome/Activation Email via Notification Service
-        const frontendUrl = process.env.FRONTEND_URL || 'https://gobanqo.com';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         const ownerName = dbUser.name || property.propertyName || 'Property Owner';
         const loginUrl = `${frontendUrl}/login`;
 

@@ -79,7 +79,7 @@ exports.handler = async (event) => {
             }
         }).promise();
 
-        const frontendUrl = process.env.FRONTEND_URL || 'https://gobanqo.com';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         const activationUrl = `${frontendUrl}/activate?token=${rawToken}&id=${user.userId}`;
         const ownerName = dbUser.name || property.propertyName || 'Property Owner';
 

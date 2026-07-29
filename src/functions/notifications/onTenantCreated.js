@@ -59,7 +59,7 @@ exports.handler = async (event) => {
                 } catch (_) {}
             }
 
-            const frontendUrl = process.env.FRONTEND_URL || 'https://gobanqo.com';
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
             const isPendingActivation = tenantUser && (tenantUser.status === 'pending_activation' || tenantUser.invitationStatus === 'sent');
             const loginUrl = `${frontendUrl}/login`;
             const onboardingUrl = isPendingActivation ? `${frontendUrl}/activate` : `${frontendUrl}/tenant/dashboard`;

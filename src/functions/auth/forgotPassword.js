@@ -38,7 +38,7 @@ exports.handler = async (event) => {
                 const { NOTIFICATION_EVENTS } = require('../../constants/notificationEvents');
                 const tenantService = require('../../services/tenant.service');
                 const tenant = await tenantService.getTenantByUserId(dbUser.userId);
-                const frontendUrl = process.env.FRONTEND_URL || 'https://gobanqo.com';
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
                 const activationUrl = `${frontendUrl}/activate?token=${dbUser.invitationTokenHash || ''}&id=${dbUser.userId}`;
                 
                 await notificationService.sendNotification({
