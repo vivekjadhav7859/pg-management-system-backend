@@ -1,44 +1,235 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+# org: shoukat
 service: pg-management-backend
-frameworkVersion: '4'
+
+custom:
+  kycBucketName: ${self:service}-kyc-documents-${self:provider.stage}
+  cognitoDomain:
+    dev: gobanqodev
+    qa: pg-mgmt-auth-qa-ap-south-1
+    prod: pg-mgmt-auth-prod-ap-south-1
+  allowedCorsOrigins:
+    - https://gobanqo.com
+    - https://www.gobanqo.com
+    - https://dm2ue9mo1yuef.cloudfront.net
+    - http://localhost:5173
+    - http://localhost:5174
+    - http://localhost:3000
+    - http://127.0.0.1:5173
+    - http://127.0.0.1:3000
+  corsConfig: &corsConfig
+    origins: ${self:custom.allowedCorsOrigins}
+    headers:
+      - Content-Type
+      - X-Amz-Date
+      - Authorization
+      - X-Api-Key
+      - X-Amz-Security-Token
+    allowCredentials: true
+  prune:
+    automatic: true
+    number: 3
+  splitStacks:
+    custom: splits.js
+
+plugins:
+  - ./scripts/remove-log-groups-plugin.js
+  - serverless-plugin-split-stacks
 
 provider:
   name: aws
-  runtime: nodejs18.x
+  runtime: nodejs20.x
   region: ap-south-1
   stage: ${opt:stage, 'dev'}
-  profile: pg-mgmt-${self:provider.stage}
+  apiName: ${self:service}-${self:provider.stage}-v2
+  deploymentBucket: ${env:DEPLOYMENT_BUCKET, 'serverless-framework-deployments-ap-south-1-5fca437e-9fb3'}
+  # Keep functions on $LATEST. Publishing a version for every function adds one
+  # CloudFormation resource each and pushes this stack past AWS's 500-resource limit.
+  versionFunctions: false
+
 
   environment:
     STAGE: ${self:provider.stage}
     USER_POOL_ID: !Ref CognitoUserPool
     USER_POOL_CLIENT_ID: !Ref CognitoUserPoolClient
+    USER_TABLE: ${self:service}-users-${self:provider.stage}
+    PROPERTY_TABLE: ${self:service}-properties-${self:provider.stage}
+    ROOM_TABLE: ${self:service}-rooms-${self:provider.stage}
+    TENANT_TABLE: ${self:service}-tenants-${self:provider.stage}
+    BED_ASSIGNMENT_TABLE: ${self:service}-bed-assignments-${self:provider.stage}
+    S3_BUCKET: ${self:custom.kycBucketName}
+    RENT_PAYMENT_TABLE: ${self:service}-rent-payments-${self:provider.stage}
+    EXPENSE_TABLE: ${self:service}-expenses-${self:provider.stage}
+    REMINDER_SETTINGS_TABLE: ${self:service}-reminder-settings-${self:provider.stage}
+    NOTIFICATION_TABLE: ${self:service}-notifications-${self:provider.stage}
+    COMPLAINTS_TABLE: ${self:service}-complaints-${self:provider.stage}
+    INVITE_CODE_TABLE: ${self:service}-property-invite-codes-${self:provider.stage}
+    EMAIL_LOG_TABLE: ${self:service}-email-logs-${self:provider.stage}
+    POLICY_ACCEPTANCE_LOG_TABLE: ${self:service}-policy-logs-${self:provider.stage}
+    AUDIT_LOG_TABLE: ${self:service}-audit-logs-${self:provider.stage}
+    USER_CONSENT_TABLE: ${self:service}-user-consents-${self:provider.stage}
+    DATA_REQUEST_TABLE: ${self:service}-data-requests-${self:provider.stage}
+    SUBSCRIPTION_TABLE: ${self:service}-subscriptions-${self:provider.stage}
+    WEBHOOK_EVENT_TABLE: ${self:service}-webhook-events-${self:provider.stage}
+    KMS_KEY_ID: !Ref SmtpCredentialsKey
+    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@pgmanagement.com'}
+    SES_REGION: ${self:provider.region}
+    ALLOWED_CORS_ORIGINS: https://gobanqo.com,https://www.gobanqo.com,https://dm2ue9mo1yuef.cloudfront.net,http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000
+    SUBSCRIPTION_TRIAL_DAYS: ${env:SUBSCRIPTION_TRIAL_DAYS, '30'}
+    SUBSCRIPTION_TRIAL_PROPERTY_LIMIT: ${env:SUBSCRIPTION_TRIAL_PROPERTY_LIMIT, '1'}
+    RAZORPAY_KEY_ID: ${env:RAZORPAY_KEY_ID, ''}
+    RAZORPAY_KEY_SECRET: ${env:RAZORPAY_KEY_SECRET, ''}
+    RAZORPAY_WEBHOOK_SECRET: ${env:RAZORPAY_WEBHOOK_SECRET, ''}
+    PLAN_BASIC_ANNUAL_AMOUNT: ${env:PLAN_BASIC_ANNUAL_AMOUNT, '299900'}
+    PLAN_SILVER_ANNUAL_AMOUNT: ${env:PLAN_SILVER_ANNUAL_AMOUNT, '499900'}
+    PLAN_GOLD_ANNUAL_AMOUNT: ${env:PLAN_GOLD_ANNUAL_AMOUNT, '799900'}
+    PLAN_PLATINUM_ANNUAL_AMOUNT: ${env:PLAN_PLATINUM_ANNUAL_AMOUNT, '1199900'}
+    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, 'BLoZ4JFQk6qq0UVqh-6yxEDm6mH1HbRwHpkiw6lMUPigOkivUUJ4SI7J8KHWJccdyDWzn-cdIq2z6vwbYzoU4Io'}
+    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, 'rsBVKQW9UkEICpFp9zZlEdRPrmiEFSqnSywdzGs_gsE'}
+    VAPID_SUBJECT: ${env:VAPID_SUBJECT, 'mailto:support@gobanqo.com'}
+
+
+
+  logs:
+    httpApi: true
 
   iam:
     role:
       statements:
+        # Cognito permissions
         - Effect: Allow
           Action:
             - cognito-idp:AdminCreateUser
             - cognito-idp:AdminInitiateAuth
             - cognito-idp:AdminSetUserPassword
+            - cognito-idp:AdminGetUser
+            - cognito-idp:GetUser
+            - cognito-idp:GlobalSignOut
+            - cognito-idp:AdminRespondToAuthChallenge
+            - cognito-idp:AdminLinkProviderForUser
+            - cognito-idp:ListUsers
           Resource: "*"
+        
+        # DynamoDB permissions
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:TransactWriteItems
+          Resource:
+            - !GetAtt UsersTable.Arn
+            - !Sub "${UsersTable.Arn}/index/*"
+            - !GetAtt PropertiesTable.Arn
+            - !Sub "${PropertiesTable.Arn}/index/*"
+            - !GetAtt RoomsTable.Arn
+            - !Sub "${RoomsTable.Arn}/index/*"
+            - !GetAtt TenantsTable.Arn
+            - !Sub "${TenantsTable.Arn}/index/*"
+            - !GetAtt BedAssignmentsTable.Arn
+            - !Sub "${BedAssignmentsTable.Arn}/index/*"
+            - !GetAtt RentPaymentsTable.Arn
+            - !Sub "${RentPaymentsTable.Arn}/index/*"
+            - !GetAtt ExpensesTable.Arn
+            - !Sub "${ExpensesTable.Arn}/index/*"
+            - !GetAtt ReminderSettingsTable.Arn
+            - !Sub "${ReminderSettingsTable.Arn}/index/*"
+            - !GetAtt NotificationsTable.Arn
+            - !Sub "${NotificationsTable.Arn}/index/*"
+            - !GetAtt ComplaintsTable.Arn
+            - !Sub "${ComplaintsTable.Arn}/index/*"
+            - !GetAtt PropertyInviteCodesTable.Arn
+            - !Sub "${PropertyInviteCodesTable.Arn}/index/*"
+            - !GetAtt EmailLogsTable.Arn
+            - !Sub "${EmailLogsTable.Arn}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-policy-logs-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-policy-logs-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-audit-logs-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-audit-logs-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-user-consents-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-user-consents-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-data-requests-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-data-requests-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-subscriptions-${self:provider.stage}/index/*"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}"
+            - !Sub "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-webhook-events-${self:provider.stage}/index/*"
+
+        # DynamoDB Streams read permission
+        - Effect: Allow
+          Action:
+            - dynamodb:GetRecords
+            - dynamodb:GetShardIterator
+            - dynamodb:DescribeStream
+            - dynamodb:ListStreams
+          Resource:
+            - !GetAtt TenantsTable.StreamArn
+          
+        # S3 permissions
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource:
+            - !Sub "${KYCDocumentsBucket.Arn}/*"
+        
+        # SES permissions for email reminders (kept for backward compat)
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+        
+        # KMS permissions for SMTP credential encryption
+        - Effect: Allow
+          Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:GenerateDataKey
+          Resource: !GetAtt SmtpCredentialsKey.Arn
 
 build:
   esbuild:
     bundle: true
-    minify: false
-    sourcemap: true
-    target: node18
+    minify: true
+    sourcemap: false
+    target: node20
     platform: node
+    # Keep packaging stable in local and CI environments by limiting the
+    # number of Lambda functions esbuild processes at the same time.
+    buildConcurrency: 3
 
 functions:
+  cognitoPreSignUp:
+    handler: src/functions/auth/preSignUp.handler
+    events:
+      - cognitoUserPool:
+          pool: pg-mgmt-user-pool-${self:provider.stage}
+          trigger: PreSignUp
+          existing: true
+
+  cognitoCustomMessage:
+    handler: src/functions/auth/customMessage.handler
+    events:
+      - cognitoUserPool:
+          pool: pg-mgmt-user-pool-${self:provider.stage}
+          trigger: CustomMessage
+          existing: true
+
+  authorizer:
+    handler: src/functions/auth/authorizer.handler
+  # ============ AUTH ENDPOINTS ============
   signup:
     handler: src/functions/auth/signup.handler
     events:
       - http:
           path: auth/signup
           method: post
-          cors: true
+          cors: *corsConfig
 
   login:
     handler: src/functions/auth/login.handler
@@ -46,18 +237,1273 @@ functions:
       - http:
           path: auth/login
           method: post
-          cors: true
+          cors: *corsConfig
+
+  refreshToken:
+    handler: src/functions/auth/refreshToken.handler
+    events:
+      - http:
+          path: auth/refresh
+          method: post
+          cors: *corsConfig
+
+  logout:
+    handler: src/functions/auth/logout.handler
+    events:
+      - http:
+          path: auth/logout
+          method: post
+          cors: *corsConfig
+
+  # ─── Legal & Policy Compliance ─────────────────────────────────────────────
+  getLatestPolicies:
+    handler: src/functions/auth/getLatestPolicies.handler
+    events:
+      - http:
+          path: auth/policies/latest
+          method: get
+          cors: *corsConfig
+
+  acceptPolicies:
+    handler: src/functions/auth/acceptPolicies.handler
+    events:
+      - http:
+          path: user/policy-acceptance
+          method: post
+          cors: *corsConfig
+
+  getPolicyHistory:
+    handler: src/functions/auth/getPolicyHistory.handler
+    events:
+      - http:
+          path: user/policy-acceptance/history
+          method: get
+          cors: *corsConfig
+
+  # ─── Forgot Password ────────────────────────────────────────────────────────
+  forgotPassword:
+    handler: src/functions/auth/forgotPassword.handler
+    events:
+      - http:
+          path: auth/forgot-password
+          method: post
+          cors: *corsConfig
+
+  confirmForgotPassword:
+    handler: src/functions/auth/confirmForgotPassword.handler
+    events:
+      - http:
+          path: auth/confirm-forgot-password
+          method: post
+          cors: *corsConfig
+
+  # ─── Email Verification ─────────────────────────────────────────────────────
+  verifyEmail:
+    handler: src/functions/auth/verifyEmail.handler
+    events:
+      - http:
+          path: auth/verify-email
+          method: post
+          cors: *corsConfig
+
+  resendVerification:
+    handler: src/functions/auth/resendVerification.handler
+    events:
+      - http:
+          path: auth/resend-verification
+          method: post
+          cors: *corsConfig
+
+  verifyToken:
+    handler: src/functions/auth/verifyToken.handler
+    events:
+      - http:
+          path: auth/verify
+          method: get
+          cors: *corsConfig
+
+  verifyInvitationToken:
+    handler: src/functions/auth/verifyInvitationToken.handler
+    events:
+      - http:
+          path: auth/verify-invitation
+          method: get
+          cors: *corsConfig
+
+  activateAccount:
+    handler: src/functions/auth/activateAccount.handler
+    events:
+      - http:
+          path: auth/activate-account
+          method: post
+          cors: *corsConfig
+
+
+  getProfile:
+    handler: src/functions/auth/getProfile.handler
+    events:
+      - http:
+          path: auth/profile
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateProfile:
+    handler: src/functions/auth/updateProfile.handler
+    events:
+      - http:
+          path: auth/profile
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ PRIVACY & SECURITY ENDPOINTS ============
+  getConsent:
+    handler: src/functions/privacy/getConsent.handler
+    events:
+      - http:
+          path: privacy/consent
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateConsent:
+    handler: src/functions/privacy/updateConsent.handler
+    events:
+      - http:
+          path: privacy/consent
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  exportData:
+    handler: src/functions/privacy/exportData.handler
+    events:
+      - http:
+          path: privacy/export-data
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  requestErasure:
+    handler: src/functions/privacy/requestErasure.handler
+    events:
+      - http:
+          path: privacy/request-erasure
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getAuditLogs:
+    handler: src/functions/security/getAuditLogs.handler
+    events:
+      - http:
+          path: security/audit-logs
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ ADMIN ENDPOINTS ============
+  createAdmin:
+    handler: src/functions/auth/createAdmin.handler
+    events:
+      - http:
+          path: admin/create-user
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ OWNER SUBSCRIPTIONS ============
+  getSubscriptionStatus:
+    handler: src/functions/subscription/getStatus.handler
+    events:
+      - http:
+          path: subscriptions/status
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  startSubscriptionTrial:
+    handler: src/functions/subscription/startTrial.handler
+    events:
+      - http:
+          path: subscriptions/trial
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  createSubscriptionCheckout:
+    handler: src/functions/subscription/createCheckout.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/checkout
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  verifySubscriptionCheckout:
+    handler: src/functions/subscription/verifyCheckout.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/verify
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  razorpayPaymentWebhook:
+    handler: src/functions/subscription/webhook.handler
+    timeout: 29
+    events:
+      - http:
+          path: subscriptions/webhook
+          method: post
+          cors: *corsConfig
+
+  # ============ PROPERTY MANAGEMENT ENDPOINTS ============
+  addProperty:
+    handler: src/functions/property/addProperty.handler
+    events:
+      - http:
+          path: properties
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getProperties:
+    handler: src/functions/property/getProperties.handler
+    events:
+      - http:
+          path: properties
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getPropertyById:
+    handler: src/functions/property/getPropertyById.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  activatePropertyManagement:
+    handler: src/functions/property/activateManagement.handler
+    events:
+      - http:
+          path: properties/{propertyId}/activate-management
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  createImageUploadUrls:
+    handler: src/functions/property/createImageUploadUrls.handler
+    events:
+      - http:
+          path: upload/images/sign
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateProperty:
+    handler: src/functions/property/updateProperty.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteProperty:
+    handler: src/functions/property/deleteProperty.handler
+    events:
+      - http:
+          path: properties/{propertyId}
+          method: delete
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ ROOM MANAGEMENT ENDPOINTS ============
+  addRoom:
+    handler: src/functions/property/addRoom.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rooms
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  bulkAddRooms:
+    handler: src/functions/property/bulkAddRooms.handler
+    timeout: 29
+    events:
+      - http:
+          path: properties/{propertyId}/rooms/bulk
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRooms:
+    handler: src/functions/property/getRooms.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rooms
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRoomById:
+    handler: src/functions/property/getRoomById.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateRoom:
+    handler: src/functions/property/updateRoom.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteRoom:
+    handler: src/functions/property/deleteRoom.handler
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: delete
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ TENANT MANAGEMENT ENDPOINTS ============
+  inviteTenant:
+    handler: src/functions/tenant/inviteTenant.handler
+    events:
+      - http:
+          path: tenants/invite
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  checkInTenant:
+    handler: src/functions/tenant/checkInTenant.handler
+    events:
+      - http:
+          path: tenants/check-in
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  resendInvitation:
+    handler: src/functions/tenant/resendInvitation.handler
+    events:
+      - http:
+          path: tenants/resend-invitation
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+      
+  getTenants:
+    handler: src/functions/tenant/getTenants.handler
+    events:
+      - http:
+          path: properties/{propertyId}/tenants
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getTenantById:
+    handler: src/functions/tenant/getTenantById.handler
+    events:
+      - http:
+          path: tenants/{tenantId}
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateTenant:
+    handler: src/functions/tenant/updateTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  checkOutTenant:
+    handler: src/functions/tenant/checkOutTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/check-out
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  migrateTenant:
+    handler: src/functions/tenant/migrateTenant.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/migrate
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  uploadKYC:
+    handler: src/functions/tenant/uploadKYC.handler
+    events:
+      - http:
+          path: tenants/{tenantId}/kyc/upload-url
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRoomStatus:
+    handler: src/functions/tenant/getRoomStatus.handler
+    events:
+      - http:
+          path: rooms/{roomId}/status
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  discoverProperties:
+    handler: src/functions/tenant/discoverProperties.handler
+    events:
+      - http:
+          path: tenant/discover
+          method: get
+          cors: *corsConfig
+
+  createBookingRequest:
+    handler: src/functions/tenant/createBookingRequest.handler
+    events:
+      - http:
+          path: tenant/booking-requests
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  signAgreement:
+    handler: src/functions/tenant/signAgreement.handler
+    events:
+      - http:
+          path: tenant/agreement/sign
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  createCheckoutRequest:
+    handler: src/functions/tenant/createCheckoutRequest.handler
+    events:
+      - http:
+          path: tenant/checkout-request
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateTenantProfile:
+    handler: src/functions/tenant/updateTenantProfile.handler
+    events:
+      - http:
+          path: tenant/profile
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  payRent:
+    handler: src/functions/tenant/payRent.handler
+    events:
+      - http:
+          path: tenant/pay-rent
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  savePushSubscription:
+    handler: src/functions/tenant/savePushSubscription.handler
+    events:
+      - http:
+          path: tenant/push-subscription
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ FINANCIAL MANAGEMENT - RENT COLLECTION ============
+  collectRent:
+    handler: src/functions/financial/collectRent.handler
+    events:
+      - http:
+          path: financial/rent/collect
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # Generates monthly rent bills on 1st of each month (due 5th)
+  # Also callable manually via POST /financial/generate-bills
+  generateMonthlyBills:
+    handler: src/functions/financial/generateMonthlyBills.handler
+    timeout: 29
+    events:
+      - http:
+          path: financial/generate-bills
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+      - schedule:
+          # Runs at 00:01 AM IST (18:31 UTC previous day) on the 1st of every month
+          rate: cron(31 18 L * ? *)
+          enabled: true
+          input:
+            source: "scheduled"
+
+  getRentPayments:
+    handler: src/functions/financial/getRentPayments.handler
+    events:
+      - http:
+          path: properties/{propertyId}/rent-payments
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updatePayment:
+    handler: src/functions/financial/updatePayment.handler
+    events:
+      - http:
+          path: financial/payments/{paymentId}
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ FINANCIAL MANAGEMENT - EXPENSE TRACKING ============
+  addExpense:
+    handler: src/functions/financial/addExpense.handler
+    events:
+      - http:
+          path: financial/expenses
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getExpenses:
+    handler: src/functions/financial/getExpenses.handler
+    events:
+      - http:
+          path: properties/{propertyId}/expenses
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateExpense:
+    handler: src/functions/financial/updateExpense.handler
+    events:
+      - http:
+          path: financial/expenses/{expenseId}
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteExpense:
+    handler: src/functions/financial/deleteExpense.handler
+    events:
+      - http:
+          path: financial/expenses/{expenseId}
+          method: delete
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ FINANCIAL MANAGEMENT - REPORTS ============
+  generateReport:
+    handler: src/functions/financial/generateReport.handler
+    events:
+      - http:
+          path: properties/{propertyId}/financial-report
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ REMINDER MANAGEMENT ============
+  sendReminder:
+    handler: src/functions/financial/sendReminder.handler
+    timeout: 15
+    events:
+      - http:
+          path: financial/send-reminder
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  testSmtpCredentials:
+    handler: src/functions/financial/testCredentials.handler
+    timeout: 15
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings/test
+          method: post
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getReminderSettings:
+    handler: src/functions/financial/getReminderSettings.handler
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings
+          method: get
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateReminderSettings:
+    handler: src/functions/financial/updateReminderSettings.handler
+    events:
+      - http:
+          path: properties/{propertyId}/reminder-settings
+          method: put
+          cors: *corsConfig
+
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ SEARCH & NOTIFICATIONS ============
+  globalSearch:
+    handler: src/functions/search/globalSearch.handler
+    events:
+      - http:
+          path: search
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getNotifications:
+    handler: src/functions/notifications/getNotifications.handler
+    events:
+      - http:
+          path: notifications
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  markNotificationRead:
+    handler: src/functions/notifications/markRead.handler
+    events:
+      - http:
+          path: notifications/{id}/read
+          method: put
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  markAllNotificationsRead:
+    handler: src/functions/notifications/markAllRead.handler
+    events:
+      - http:
+          path: notifications/read-all
+          method: put
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  markNotificationUnread:
+    handler: src/functions/notifications/markUnread.handler
+    events:
+      - http:
+          path: notifications/{id}/unread
+          method: put
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  deleteNotification:
+    handler: src/functions/notifications/deleteNotification.handler
+    events:
+      - http:
+          path: notifications/{id}
+          method: delete
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getNotificationLogs:
+    handler: src/functions/notifications/getNotificationLogs.handler
+    events:
+      - http:
+          path: notifications/logs
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  sesEventHandler:
+    handler: src/functions/notifications/sesEventHandler.handler
+    events:
+      - http:
+          path: notifications/ses-events
+          method: post
+          cors: *corsConfig
+
+  getVapidPublicKey:
+    handler: src/functions/notifications/getVapidPublicKey.handler
+    events:
+      - http:
+          path: notifications/vapid-public-key
+          method: get
+          cors: *corsConfig
+
+  deletePushSubscription:
+    handler: src/functions/tenant/deletePushSubscription.handler
+    events:
+      - http:
+          path: tenant/push-subscription
+          method: delete
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+
+
+  # ============ COMPLAINTS MANAGEMENT ============
+  createComplaint:
+    handler: src/functions/complaints/createComplaint.handler
+    events:
+      - http:
+          path: properties/{propertyId}/complaints
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getComplaints:
+    handler: src/functions/complaints/getComplaints.handler
+    events:
+      - http:
+          path: properties/{propertyId}/complaints
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateComplaintStatus:
+    handler: src/functions/complaints/updateComplaintStatus.handler
+    events:
+      - http:
+          path: properties/{propertyId}/complaints/{complaintId}/status
+          method: put
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  # ============ TENANT PORTAL / INVITE CODE ENDPOINTS ============
+  generateInviteCode:
+    handler: src/functions/property/generateInviteCode.handler
+    events:
+      - http:
+          path: properties/{propertyId}/invite-code
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getInviteCode:
+    handler: src/functions/property/getInviteCode.handler
+    events:
+      - http:
+          path: properties/{propertyId}/invite-code
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  validateInviteCode:
+    handler: src/functions/property/validateInviteCode.handler
+    events:
+      - http:
+          path: invite-code/validate
+          method: post
+          cors: *corsConfig
+
+  getPublicPropertyInvite:
+    handler: src/functions/property/getPublicPropertyInvite.handler
+    events:
+      - http:
+          path: invite-code/public/{code}
+          method: get
+          cors: *corsConfig
+
+  getPublicAvailableRooms:
+    handler: src/functions/property/getPublicAvailableRooms.handler
+    events:
+      - http:
+          path: invite-code/public/{code}/rooms
+          method: get
+          cors: *corsConfig
+
+  submitPublicJoinRequest:
+    handler: src/functions/property/submitPublicJoinRequest.handler
+    events:
+      - http:
+          path: invite-code/public/{code}/submit
+          method: post
+          cors: *corsConfig
+
+  linkTenantProperty:
+    handler: src/functions/tenant/linkTenantProperty.handler
+    events:
+      - http:
+          path: tenant/link-property
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getTenantDashboard:
+    handler: src/functions/tenant/getTenantDashboard.handler
+    events:
+      - http:
+          path: tenant/dashboard
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  getRequests:
+    handler: src/functions/requests/getRequests.handler
+    events:
+      - http:
+          path: requests
+          method: get
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  updateRequestStatus:
+    handler: src/functions/requests/updateRequestStatus.handler
+    events:
+      - http:
+          path: requests/{requestId}/status
+          method: put
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  bulkApproveRequests:
+    handler: src/functions/requests/bulkApproveRequests.handler
+    events:
+      - http:
+          path: requests/bulk-approve
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+  bulkDeleteRequests:
+    handler: src/functions/requests/bulkDeleteRequests.handler
+    events:
+      - http:
+          path: requests/bulk-delete
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+
+
+  # ============ EMAIL AUTOMATION ============
+  scheduledRentReminder:
+    handler: src/functions/financial/scheduledRentReminder.handler
+    timeout: 300
+    events:
+      - schedule:
+          # 9:00 AM IST (3:30 AM UTC) on 1st of every month
+          rate: cron(30 3 1 * ? *)
+          enabled: true
+          input:
+            source: "scheduled"
+
+  onTenantCreated:
+    handler: src/functions/notifications/onTenantCreated.handler
+    timeout: 30
+    events:
+      - stream:
+          type: dynamodb
+          arn: !GetAtt TenantsTable.StreamArn
+          startingPosition: LATEST
+          batchSize: 10
+          bisectBatchOnFunctionError: true
+
+  broadcastEmail:
+    handler: src/functions/notifications/broadcastEmail.handler
+    timeout: 29
+    events:
+      - http:
+          path: notifications/broadcast
+          method: post
+          cors: *corsConfig
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+            identitySource: method.request.header.Authorization
+            type: token
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!.serverless/**'
+    - '!scripts/**'
+    - '!tests/**'
+    - '!docs/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!coverage/**'
+    - '!*.md'
 
 resources:
   Resources:
+    # ============ COGNITO USER POOL ============
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
+      DeletionPolicy: Retain
       Properties:
         UserPoolName: pg-mgmt-user-pool-${self:provider.stage}
-        AutoVerifiedAttributes:
-          - email
         UsernameAttributes:
           - email
+        AutoVerifiedAttributes:
+          - email
+        Schema:
+          - Name: email
+            AttributeDataType: String
+            Mutable: false
+          - Name: name
+            AttributeDataType: String
+            Mutable: true
+          - Name: phone_number
+            AttributeDataType: String
+            Mutable: true
+          - Name: picture
+            AttributeDataType: String
+            Mutable: true
         Policies:
           PasswordPolicy:
             MinimumLength: 8
@@ -68,9 +1514,717 @@ resources:
 
     CognitoUserPoolClient:
       Type: AWS::Cognito::UserPoolClient
+      DependsOn: CognitoUserPoolIdentityProviderGoogle
+      DeletionPolicy: Retain
       Properties:
         ClientName: pg-mgmt-client-${self:provider.stage}
         UserPoolId: !Ref CognitoUserPool
         GenerateSecret: false
+        RefreshTokenValidity: 3650
+        TokenValidityUnits:
+          RefreshToken: days
         ExplicitAuthFlows:
           - ADMIN_NO_SRP_AUTH
+          - USER_PASSWORD_AUTH
+        PreventUserExistenceErrors: ENABLED
+        SupportedIdentityProviders:
+          - COGNITO
+          - Google
+        AllowedOAuthFlows:
+          - code
+        AllowedOAuthScopes:
+          - email
+          - openid
+          - profile
+        AllowedOAuthFlowsUserPoolClient: true
+        CallbackURLs:
+          - http://localhost:5173/auth/callback
+          - https://gobanqo.com/auth/callback
+        LogoutURLs:
+          - http://localhost:5173/login
+          - https://gobanqo.com/login
+
+    # CognitoUserPoolDomain:
+    #   Type: AWS::Cognito::UserPoolDomain
+    #   Properties:
+    #     Domain: ${self:custom.cognitoDomain.${self:provider.stage}}
+    #     UserPoolId: !Ref CognitoUserPool
+
+    CognitoUserPoolIdentityProviderGoogle:
+      Type: AWS::Cognito::UserPoolIdentityProvider
+      DeletionPolicy: Retain
+      Properties:
+        ProviderName: Google
+        ProviderType: Google
+        UserPoolId: !Ref CognitoUserPool
+        ProviderDetails:
+          client_id: "1057172668359-o9o1l6moa659flrhdjhr7nsnitfq1gvb.apps.googleusercontent.com"
+          client_secret: "${env:GOOGLE_CLIENT_SECRET, 'GOCSPX-placeholder-secret-value'}"
+          authorize_scopes: "email profile openid"
+        AttributeMapping:
+          email: "email"
+          name: "name"
+          picture: "picture"
+
+    # ============ DYNAMODB TABLES ============
+    
+    # Users Table
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-users-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: cognitoUserId
+            AttributeType: S
+          - AttributeName: emailLowerCase
+            AttributeType: S
+          - AttributeName: userTypeIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CognitoUserIdIndex
+            KeySchema:
+              - AttributeName: cognitoUserId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: emailLowerCase
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: UserTypeIndex
+            KeySchema:
+              - AttributeName: userTypeIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Properties Table
+    PropertiesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-properties-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: propertyId
+            AttributeType: S
+          - AttributeName: ownerIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: propertyId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: OwnerIdIndex
+            KeySchema:
+              - AttributeName: ownerIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Rooms Table
+    RoomsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-rooms-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: roomId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: roomId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+    
+    # Tenants Table
+    TenantsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-tenants-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenantId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: roomIdIndex
+            AttributeType: S
+          - AttributeName: userIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenantId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: RoomIdIndex
+            KeySchema:
+              - AttributeName: roomIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Bed Assignments Table
+    BedAssignmentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-bed-assignments-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: assignmentId
+            AttributeType: S
+          - AttributeName: roomIdIndex
+            AttributeType: S
+          - AttributeName: tenantIdIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: assignmentId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: RoomIdIndex
+            KeySchema:
+              - AttributeName: roomIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: TenantIdIndex
+            KeySchema:
+              - AttributeName: tenantIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # S3 Bucket for KYC Documents
+    KYCDocumentsBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        BucketName: ${self:custom.kycBucketName}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins: ${self:custom.allowedCorsOrigins}
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+              AllowedHeaders:
+                - '*'
+              MaxAge: 3000
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteOldDocuments
+              Status: Enabled
+              ExpirationInDays: 365
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Rent Payments Table
+    RentPaymentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-rent-payments-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: paymentId
+            AttributeType: S
+          - AttributeName: tenantIdIndex
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: paymentMonthIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: paymentId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: TenantIdIndex
+            KeySchema:
+              - AttributeName: tenantIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: PaymentMonthIndex
+            KeySchema:
+              - AttributeName: paymentMonthIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Expenses Table
+    ExpensesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-expenses-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: expenseId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: expenseMonthIndex
+            AttributeType: S
+          - AttributeName: expenseTypeIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: expenseId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ExpenseMonthIndex
+            KeySchema:
+              - AttributeName: expenseMonthIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ExpenseTypeIndex
+            KeySchema:
+              - AttributeName: expenseTypeIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Reminder Settings Table
+    ReminderSettingsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-reminder-settings-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: propertyId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: propertyId
+            KeyType: HASH
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Notifications Table
+    NotificationsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-notifications-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: userIdIndex
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Complaints Table
+    ComplaintsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-complaints-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: complaintId
+            AttributeType: S
+          - AttributeName: propertyIdIndex
+            AttributeType: S
+          - AttributeName: tenantIdIndex
+            AttributeType: S
+          - AttributeName: statusIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: complaintId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PropertyIdIndex
+            KeySchema:
+              - AttributeName: propertyIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: TenantIdIndex
+            KeySchema:
+              - AttributeName: tenantIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: StatusIndex
+            KeySchema:
+              - AttributeName: statusIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Property Invite Codes Table
+    PropertyInviteCodesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-property-invite-codes-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: propertyId
+            AttributeType: S
+          - AttributeName: code
+            AttributeType: S
+        KeySchema:
+          - AttributeName: propertyId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CodeIndex
+            KeySchema:
+              - AttributeName: code
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        Tags:
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # Email Logs Table
+    EmailLogsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:service}-email-logs-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: logId
+            AttributeType: S
+          - AttributeName: ownerIdIndex
+            AttributeType: S
+        KeySchema:
+          - AttributeName: logId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: OwnerIdIndex
+            KeySchema:
+              - AttributeName: ownerIdIndex
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+    # Pre-existing in DynamoDB: PolicyAcceptanceLogsTable, AuditLogsTable, UserConsentsTable, DataRequestsTable, SubscriptionsTable, WebhookEventsTable
+    # PolicyAcceptanceLogsTable:
+    #   Type: AWS::DynamoDB::Table
+    # AuditLogsTable:
+    #   Type: AWS::DynamoDB::Table
+    # UserConsentsTable:
+    #   Type: AWS::DynamoDB::Table
+    # DataRequestsTable:
+    #   Type: AWS::DynamoDB::Table
+    # SubscriptionsTable:
+    #   Type: AWS::DynamoDB::Table
+    # WebhookEventsTable:
+    #   Type: AWS::DynamoDB::Table
+
+
+    # ============ KMS KEY FOR SMTP CREDENTIALS ============
+    SmtpCredentialsKey:
+      Type: AWS::KMS::Key
+      DeletionPolicy: Retain
+      Properties:
+        Description: KMS key for encrypting owner SMTP credentials
+        EnableKeyRotation: true
+        KeyPolicy:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: EnableIAMUserPermissions
+              Effect: Allow
+              Principal:
+                AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+              Action: "kms:*"
+              Resource: "*"
+
+    SmtpCredentialsKeyAlias:
+      Type: AWS::KMS::Alias
+      Properties:
+        AliasName: alias/pg-management-smtp-${self:provider.stage}
+        TargetKeyId: !Ref SmtpCredentialsKey
+
+  Outputs:
+    UserPoolId:
+      Description: Cognito User Pool ID
+      Value: !Ref CognitoUserPool
+      Export:
+        Name: ${self:service}-UserPoolId-${self:provider.stage}
+    
+    UserPoolClientId:
+      Description: Cognito User Pool Client ID
+      Value: !Ref CognitoUserPoolClient
+      Export:
+        Name: ${self:service}-UserPoolClientId-${self:provider.stage}
+    
+    UsersTableName:
+      Description: DynamoDB Users Table Name
+      Value: !Ref UsersTable
+      Export:
+        Name: ${self:service}-UsersTable-${self:provider.stage}
+    
+    PropertiesTableName:
+      Description: DynamoDB Properties Table Name
+      Value: !Ref PropertiesTable
+      Export:
+        Name: ${self:service}-PropertiesTable-${self:provider.stage}
+    
+    RoomsTableName:
+      Description: DynamoDB Rooms Table Name
+      Value: !Ref RoomsTable
+      Export:
+        Name: ${self:service}-RoomsTable-${self:provider.stage}
+
+    TenantsTableName:
+      Description: DynamoDB Tenants Table Name
+      Value: !Ref TenantsTable
+      Export:
+        Name: ${self:service}-TenantsTable-${self:provider.stage}
+    
+    BedAssignmentsTableName:
+      Description: DynamoDB Bed Assignments Table Name
+      Value: !Ref BedAssignmentsTable
+      Export:
+        Name: ${self:service}-BedAssignmentsTable-${self:provider.stage}
+    
+    KYCDocumentsBucketName:
+      Description: S3 Bucket for KYC Documents
+      Value: !Ref KYCDocumentsBucket
+      Export:
+        Name: ${self:service}-KYCBucket-${self:provider.stage}
+
+    RentPaymentsTableName:
+      Description: DynamoDB Rent Payments Table Name
+      Value: !Ref RentPaymentsTable
+      Export:
+        Name: ${self:service}-RentPaymentsTable-${self:provider.stage}
+    
+    ExpensesTableName:
+      Description: DynamoDB Expenses Table Name
+      Value: !Ref ExpensesTable
+      Export:
+        Name: ${self:service}-ExpensesTable-${self:provider.stage}
+    
+    ReminderSettingsTableName:
+      Description: DynamoDB Reminder Settings Table Name
+      Value: !Ref ReminderSettingsTable
+      Export:
+        Name: ${self:service}-ReminderSettingsTable-${self:provider.stage}
+
+    NotificationsTableName:
+      Description: DynamoDB Notifications Table Name
+      Value: !Ref NotificationsTable
+      Export:
+        Name: ${self:service}-NotificationsTable-${self:provider.stage}
+
+    ComplaintsTableName:
+      Description: DynamoDB Complaints Table Name
+      Value: !Ref ComplaintsTable
+      Export:
+        Name: ${self:service}-ComplaintsTable-${self:provider.stage}
+
+    PropertyInviteCodesTableName:
+      Description: DynamoDB Property Invite Codes Table Name
+      Value: !Ref PropertyInviteCodesTable
+      Export:
+        Name: ${self:service}-PropertyInviteCodesTable-${self:provider.stage}
+
+    SmtpCredentialsKeyId:
+      Description: KMS Key ID for SMTP credential encryption
+      Value: !Ref SmtpCredentialsKey
+      Export:
+        Name: ${self:service}-SmtpCredentialsKey-${self:provider.stage}
+
+    EmailLogsTableName:
+      Description: DynamoDB Email Logs Table Name
+      Value: !Ref EmailLogsTable
+      Export:
+        Name: ${self:service}-EmailLogsTable-${self:provider.stage}

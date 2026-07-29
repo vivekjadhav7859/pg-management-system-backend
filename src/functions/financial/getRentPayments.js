@@ -1,0 +1,88 @@
+const dynamoService = require('../../services/dynamodb.service');
+const propertyService = require('../../services/property.service');
+const financialService = require('../../services/financial.service');
+const tenantService = require('../../services/tenant.service');
+const response = require('../../utils/response');
+
+exports.handler = async (event) => {
+    try {
+        response.setCorsOrigin(event);
+        const dbUser = event.requestContext?.authorizer;
+        if (!dbUser) {
+            return response.error('Unauthorized', 401);
+        }
+
+        const propertyId = event.pathParameters.propertyId;
+
+        // Verify property ownership
+        const property = await propertyService.getPropertyById(propertyId);
+        if (!property) {
+            return response.error('Property not found', 404);
+        }
+
+        if (property.ownerId !== dbUser.userId && dbUser.userType !== 'admin' && dbUser.userType !== 'tenant') {
+            return response.error('You can only view payments of your properties', 403);
+        }
+
+        // Optional ?month=YYYY-MM filter
+        const month = event.queryStringParameters?.month;
+
+        let payments;
+        if (month && /^\d{4}-\d{2}$/.test(month)) {
+            // Filter by specific month using the PaymentMonthIndex GSI
+            payments = await financialService.getRentPaymentsByMonth(propertyId, month);
+        } else {
+            // Return all payments for this property (default behaviour)
+            const result = await financialService.getRentPaymentsByProperty(propertyId);
+            payments = result.payments;
+        }
+
+        if (dbUser.userType === 'tenant') {
+            const tenant = await tenantService.getTenantByUserId(dbUser.userId);
+            if (!tenant || tenant.propertyId !== propertyId) {
+                return response.error('You can only view your own payments', 403);
+            }
+            payments = payments.filter(p => p.tenantId === tenant.tenantId || p.tenantIdIndex === tenant.tenantId);
+        }
+
+        // Fetch rooms and tenants to enrich payment objects with human-readable room numbers and tenant names
+        const [roomsRes, tenantsRes] = await Promise.all([
+            propertyService.getRoomsByProperty(propertyId).catch(() => ({ rooms: [] })),
+            tenantService.getTenantsByProperty(propertyId).catch(() => ({ tenants: [] }))
+        ]);
+        const roomMap = new Map((roomsRes.rooms || []).map(r => [r.roomId, r.roomNumber]));
+        const tenantMap = new Map((tenantsRes.tenants || []).map(t => [t.tenantId, t.name]));
+
+        // Auto-upgrade 'pending' → 'overdue' for bills past due date and enrich roomNumber/tenantName
+        const today = new Date();
+        payments = payments.map(p => {
+            let status = p.paymentStatus;
+            if (status === 'pending' && p.dueDate) {
+                const due = new Date(p.dueDate);
+                if (today > due) {
+                    status = 'overdue';
+                }
+            }
+            const resolvedRoomNumber = p.roomNumber || roomMap.get(p.roomId) || null;
+            const resolvedTenantName = p.tenantName || tenantMap.get(p.tenantId) || null;
+            return {
+                ...p,
+                paymentStatus: status,
+                roomNumber: resolvedRoomNumber,
+                tenantName: resolvedTenantName
+            };
+        });
+
+        return response.success({
+            message: 'Rent payments retrieved successfully',
+            payments,
+            count: payments.length,
+            propertyId,
+            month: month || null
+        });
+
+    } catch (err) {
+        console.error('Get rent payments error:', err);
+        return response.error('Failed to retrieve rent payments', 500);
+    }
+};

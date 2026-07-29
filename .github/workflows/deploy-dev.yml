@@ -1,0 +1,77 @@
+name: Deploy DEV
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+    env:
+      CI: "true"
+      SLS_INTERACTIVE_USER: "0"
+      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Serverless Framework
+        run: npm install -g serverless
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Validate prepaid payment configuration
+        shell: bash
+        run: |
+          required=(
+            RAZORPAY_KEY_ID
+            RAZORPAY_KEY_SECRET
+            RAZORPAY_WEBHOOK_SECRET
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "Missing DEV environment secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "Razorpay prepaid payment configuration is present."
+
+      - name: Deploy to DEV
+        env:
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+        run: |
+          echo "Deploying to DEV environment..."
+          serverless deploy --stage dev --verbose
+
+      - name: Repair broken Lambda bundles
+        run: node scripts/verify-lambdas.js --stage dev
+
+      - name: Post deployment info
+        if: success()
+        run: |
+          echo "✅ Deployment to DEV successful!"
+          echo "Stage: dev"
+          echo "Region: ap-south-1"

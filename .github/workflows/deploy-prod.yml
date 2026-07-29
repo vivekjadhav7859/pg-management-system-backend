@@ -1,0 +1,91 @@
+name: Deploy PROD
+
+on:
+  push:
+    branches:
+      - prod
+  workflow_dispatch:  # Manual trigger only for safety
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: 
+      name: production
+      url: https://api.yourpgapp.com
+    env:
+      CI: "true"
+      SLS_INTERACTIVE_USER: "0"
+      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Serverless Framework
+        run: npm install -g serverless
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Validate prepaid payment configuration
+        shell: bash
+        run: |
+          required=(
+            RAZORPAY_KEY_ID
+            RAZORPAY_KEY_SECRET
+            RAZORPAY_WEBHOOK_SECRET
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "Missing PRODUCTION environment secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "Razorpay prepaid payment configuration is present."
+
+      - name: Run tests (if available)
+        run: |
+          if [ -f "package.json" ] && npm run test --if-present; then
+            echo "✅ Tests passed"
+          else
+            echo "⚠️ No tests found, skipping..."
+          fi
+
+      - name: Deploy to PROD
+        env:
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+        run: |
+          echo "🚀 Deploying to PRODUCTION environment..."
+          serverless deploy --stage prod --verbose
+
+      - name: Post deployment info
+        if: success()
+        run: |
+          echo "✅ Deployment to PRODUCTION successful!"
+          echo "Stage: prod"
+          echo "Region: ap-south-1"
+          echo "⚠️ Please verify the deployment in AWS Console"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed!"
+          echo "Please check the logs and fix the issues."

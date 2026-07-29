@@ -1,13 +1,56 @@
 {
-  "name": "pg-management-system-backend",
+  "name": "pg-management-backend",
   "version": "1.0.0",
-  "description": "<!-- title: 'AWS Simple HTTP Endpoint example in NodeJS' description: 'This template demonstrates how to make a simple HTTP API with Node.js running on AWS Lambda and API Gateway using the Serverless Framework.' layout: Doc framework: v4 platform: AWS language: nodeJS authorLink: 'https://github.com/serverless' authorName: 'Serverless, Inc.' authorAvatar: 'https://avatars1.githubusercontent.com/u/13742415?s=200&v=4' -->",
+  "description": "PG Management System Backend with multi-environment support",
   "main": "handler.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test",
+    "verify": "node scripts/verify-deployment.js",
+    "verify:lambdas": "node scripts/verify-lambdas.js --stage dev",
+    "fix:lambdas:dev": "node scripts/verify-lambdas.js --stage dev",
+    "migrate": "node scripts/migrate-property-ownerid.js",
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:qa": "serverless deploy --stage qa",
+    "deploy:prod": "serverless deploy --stage prod",
+    "remove:dev": "serverless remove --stage dev",
+    "remove:qa": "serverless remove --stage qa",
+    "remove:prod": "serverless remove --stage prod",
+    "offline": "serverless offline --stage dev",
+    "logs:signup": "serverless logs -f signup --stage dev -t",
+    "logs:login": "serverless logs -f login --stage dev -t",
+    "info:dev": "serverless info --stage dev",
+    "info:qa": "serverless info --stage qa",
+    "info:prod": "serverless info --stage prod",
+    "prune:dev": "node scripts/prune-lambda-versions.js dev 3",
+    "prune:qa": "node scripts/prune-lambda-versions.js qa 3",
+    "prune:prod": "node scripts/prune-lambda-versions.js prod 3",
+    "subscriptions:grant-existing-trials": "node scripts/grant-existing-owner-trials.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "keywords": [
+    "serverless",
+    "aws",
+    "lambda",
+    "cognito",
+    "dynamodb",
+    "pg-management"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "serverless": "^4.38.1",
+    "serverless-esbuild": "^1.56.1",
+    "serverless-offline": "^14.3.3",
+    "serverless-plugin-split-stacks": "^1.14.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1090.0",
+    "@aws-sdk/client-kms": "^3.600.0",
+    "aws-sdk": "^2.1692.0",
+    "nodemailer": "^9.0.3",
+    "uuid": "^14.0.1",
+    "web-push": "^3.6.7"
+  }
 }
