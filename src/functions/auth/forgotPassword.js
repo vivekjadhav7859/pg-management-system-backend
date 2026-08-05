@@ -31,6 +31,34 @@ exports.handler = async (event) => {
             return response.success({ message: 'If this email is registered, a reset code has been sent.' });
         }
 
+        if (dbUser.status === 'pending_activation') {
+            // If user is pending activation, send activation email notice
+            try {
+                const notificationService = require('../../services/notification.service');
+                const { NOTIFICATION_EVENTS } = require('../../constants/notificationEvents');
+                const tenantService = require('../../services/tenant.service');
+                const tenant = await tenantService.getTenantByUserId(dbUser.userId);
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                const activationUrl = `${frontendUrl}/activate?token=${dbUser.invitationTokenHash || ''}&id=${dbUser.userId}`;
+                
+                await notificationService.sendNotification({
+                    type: NOTIFICATION_EVENTS.TENANT_INVITATION,
+                    ownerId: tenant?.ownerId || dbUser.linkedOwnerId || 'system',
+                    tenantId: tenant?.tenantId || '',
+                    tenantEmail: sanitizedEmail,
+                    data: {
+                        tenantName: dbUser.name,
+                        ownerName: 'Property Manager',
+                        propertyName: 'GoBanqo Accommodations',
+                        activationUrl,
+                        onboardingUrl: activationUrl,
+                        frontendUrl
+                    }
+                });
+            } catch (_) {}
+            return response.success({ message: 'If this email is registered, a reset code has been sent.' });
+        }
+
         await forgotPassword(sanitizedEmail);
 
         return response.success({

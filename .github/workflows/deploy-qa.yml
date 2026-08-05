@@ -62,6 +62,7 @@ jobs:
       - name: Deploy to QA
         env:
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL_QA || 'https://qa.gobanqo.com' }}
         run: |
           echo "Deploying to QA environment..."
           serverless deploy --stage qa --verbose

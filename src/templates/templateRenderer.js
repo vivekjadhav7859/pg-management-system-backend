@@ -11,25 +11,22 @@ exports.renderLayout = ({
     footerText = '', 
     actionUrl = null, 
     actionText = null,
-    showUnsubscribe = false 
+    showUnsubscribe = false,
+    frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 }) => {
     const currentYear = new Date().getFullYear();
     const cleanPreheader = preheader ? preheader.replace(/"/g, '&quot;') : '';
 
     const actionButtonHtml = (actionUrl && actionText) ? `
-      <!-- CTA Button -->
-      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 32px 0 16px 0;">
+      <!-- CTA Button & Link Fallback -->
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0;">
         <tr>
           <td align="center">
-            <!--[if mso]>
-            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${actionUrl}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="16%" stroke="f" fillcolor="#16a34a">
-              <w:anchorlock/>
-              <center style="color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:bold;">${actionText}</center>
-            </v:roundrect>
-            <![endif]-->
-            <!--[if !mso]><!-->
-            <a href="${actionUrl}" target="_blank" style="background-color: #16a34a; background-image: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: #ffffff; display: inline-block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 48px; text-align: center; text-decoration: none; padding: 0 28px; min-width: 200px; -webkit-text-size-adjust: none; border-radius: 8px; box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);">${actionText}</a>
-            <!--<![endif]-->
+            <a href="${actionUrl}" target="_blank" style="background-color: #16a34a; color: #ffffff; display: inline-block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 700; line-height: 48px; text-align: center; text-decoration: none; padding: 0 32px; min-width: 220px; border-radius: 8px; box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);">${actionText}</a>
+            <p style="margin: 12px 0 0 0; font-size: 12px; color: #64748b; word-break: break-all; line-height: 1.5;">
+              Or click / copy this link:<br/>
+              <a href="${actionUrl}" target="_blank" style="color: #16a34a; text-decoration: underline; font-weight: 600;">${actionUrl}</a>
+            </p>
           </td>
         </tr>
       </table>
@@ -206,7 +203,7 @@ exports.renderLayout = ({
               <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
                 Secure Transactional System • Powered by GoBanqo Centralized Notification Platform
               </p>
-              ${showUnsubscribe ? `<p style="font-size: 11px; color: #94a3b8; margin-top: 6px;"><a href="https://gobanqo.com/notification-preferences" style="color: #16a34a; text-decoration: underline;">Manage Notification Preferences</a></p>` : ''}
+              ${showUnsubscribe ? `<p style="font-size: 11px; color: #94a3b8; margin-top: 6px;"><a href="${frontendUrl}/notification-preferences" style="color: #16a34a; text-decoration: underline;">Manage Notification Preferences</a></p>` : ''}
             </div>
           </div>
         </td>

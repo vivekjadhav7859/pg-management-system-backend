@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require('uuid');
 const complaintsService = require('../../services/complaints.service');
 const notificationService = require('../../services/notification.service');
 const propertyService = require('../../services/property.service');
@@ -63,25 +64,37 @@ exports.handler = async (event) => {
 
         if (dbUser.userType === 'tenant' && property.ownerId) {
             const notificationType = category === 'checkout' ? 'Check-out Request' : 'Complaint Raised';
-            await notificationService.createNotification(
-                property.ownerId,
-                propertyId,
-                notificationType,
-                sanitizeInput(title),
-                sanitizeInput(description),
-                complaint.complaintId,
-                'complaint',
-                {
-                    requestStatus: 'pending',
-                    tenantUserId: dbUser.userId,
-                    tenantName: dbUser.name || '',
-                    tenantEmail: dbUser.email || '',
-                    tenantPhone: dbUser.phone || dbUser.phoneNumber || '',
-                    requestType: category === 'checkout' ? 'checkout' : 'complaint',
+            const notificationId = uuidv4();
+            const timestamp = new Date().toISOString();
+
+            if (process.env.NOTIFICATION_TABLE) {
+                try {
+                    await dynamoService.docClient.put({
+                        TableName: process.env.NOTIFICATION_TABLE,
+                        Item: {
+                            id: notificationId,
+                            userIdIndex: property.ownerId,
+                            propertyId,
+                            type: notificationType,
+                            title: sanitizeInput(title),
+                            description: sanitizeInput(description),
+                            referenceId: complaint.complaintId,
+                            entityType: 'complaint',
+                            requestStatus: 'pending',
+                            requestType: category === 'checkout' ? 'checkout' : 'complaint',
+                            tenantUserId: dbUser.userId,
+                            tenantName: dbUser.name || '',
+                            tenantEmail: dbUser.email || '',
+                            tenantPhone: dbUser.phone || dbUser.phoneNumber || '',
+                            read: false,
+                            createdAt: timestamp,
+                            updatedAt: timestamp,
+                        }
+                    }).promise();
+                } catch (notificationErr) {
+                    console.warn('Non-critical: failed to notify owner about complaint', notificationErr.message);
                 }
-            ).catch((notificationErr) => {
-                console.warn('Non-critical: failed to notify owner about complaint', notificationErr.message);
-            });
+            }
 
             const owner = await dynamoService.getUserById(property.ownerId).catch((ownerErr) => {
                 console.warn('Non-critical: failed to load owner for complaint email', ownerErr.message);

@@ -368,8 +368,9 @@ exports.handler = async (event) => {
         } catch (_) {}
 
         // Dispatch Welcome/Activation Email via Notification Service
-        const frontendUrl = process.env.FRONTEND_URL || 'https://gobanqo.com';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         const ownerName = dbUser.name || property.propertyName || 'Property Owner';
+        const loginUrl = `${frontendUrl}/login`;
 
         if (isNewUser && rawToken) {
             const activationUrl = `${frontendUrl}/activate?token=${rawToken}&id=${targetUserId}`;
@@ -387,6 +388,9 @@ exports.handler = async (event) => {
                     bedNumber,
                     rentAmount: Number(rentAmount),
                     activationUrl,
+                    onboardingUrl: activationUrl,
+                    loginUrl,
+                    frontendUrl,
                     expiresHours: 2160
                 },
                 idempotencyKey: `INVITE#${tenantId}#${timestamp.slice(0, 10)}`
@@ -405,7 +409,9 @@ exports.handler = async (event) => {
                     propertyName: property.propertyName,
                     roomNumber: room.roomNumber,
                     bedNumber,
-                    rentAmount: Number(rentAmount)
+                    rentAmount: Number(rentAmount),
+                    loginUrl,
+                    frontendUrl
                 },
                 idempotencyKey: `ASSIGN#${tenantId}#${timestamp.slice(0, 10)}`
             });

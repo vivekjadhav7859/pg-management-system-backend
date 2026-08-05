@@ -36,7 +36,7 @@ exports.handler = async (event) => {
                 continue;
             }
 
-            // Fetch owner details
+            // Fetch owner details and tenant user details
             let ownerName = property.propertyName;
             let ownerContact = '';
             let ownerEmail = undefined;
@@ -49,6 +49,21 @@ exports.handler = async (event) => {
                 }
             } catch (_) {}
 
+            let tenantUser = null;
+            if (tenant.userId && USER_TABLE) {
+                try {
+                    const userResult = await dynamodb.get({ TableName: USER_TABLE, Key: { userId: tenant.userId } }).promise();
+                    if (userResult.Item) {
+                        tenantUser = userResult.Item;
+                    }
+                } catch (_) {}
+            }
+
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const isPendingActivation = tenantUser && (tenantUser.status === 'pending_activation' || tenantUser.invitationStatus === 'sent');
+            const loginUrl = `${frontendUrl}/login`;
+            const onboardingUrl = isPendingActivation ? `${frontendUrl}/activate` : `${frontendUrl}/tenant/dashboard`;
+
             const result = await notificationService.sendNotification({
                 type: 'WELCOME',
                 ownerId: property.ownerId,
@@ -60,11 +75,16 @@ exports.handler = async (event) => {
                     tenantName: tenant.name || 'Tenant',
                     ownerName,
                     propertyName: property.propertyName,
+                    roomNumber: tenant.roomNumber || '',
+                    bedNumber: tenant.bedNumber || '',
                     ownerContact,
                     rentAmount: tenant.rentAmount || 0,
                     rentDueDay: tenant.rentDueDay || null,
                     leaseEndDate: tenant.leaseEndDate || null,
-                    rules: property.rules || []
+                    rules: property.rules || [],
+                    frontendUrl,
+                    loginUrl,
+                    onboardingUrl: isPendingActivation ? onboardingUrl : undefined
                 }
             });
 
