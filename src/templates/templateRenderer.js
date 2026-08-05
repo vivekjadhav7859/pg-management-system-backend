@@ -11,7 +11,8 @@ exports.renderLayout = ({
     footerText = '', 
     actionUrl = null, 
     actionText = null,
-    showUnsubscribe = false 
+    showUnsubscribe = false,
+    frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 }) => {
     const currentYear = new Date().getFullYear();
     const cleanPreheader = preheader ? preheader.replace(/"/g, '&quot;') : '';
@@ -202,7 +203,7 @@ exports.renderLayout = ({
               <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
                 Secure Transactional System • Powered by GoBanqo Centralized Notification Platform
               </p>
-              ${showUnsubscribe ? `<p style="font-size: 11px; color: #94a3b8; margin-top: 6px;"><a href="https://gobanqo.com/notification-preferences" style="color: #16a34a; text-decoration: underline;">Manage Notification Preferences</a></p>` : ''}
+              ${showUnsubscribe ? `<p style="font-size: 11px; color: #94a3b8; margin-top: 6px;"><a href="${frontendUrl}/notification-preferences" style="color: #16a34a; text-decoration: underline;">Manage Notification Preferences</a></p>` : ''}
             </div>
           </div>
         </td>
