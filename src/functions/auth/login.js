@@ -2,6 +2,7 @@ const { loginUser } = require('../../services/cognito.service');
 const dynamoService = require('../../services/dynamodb.service');
 const response = require('../../utils/response');
 const { validateEmail, validateRequiredFields, sanitizeInput } = require('../../utils/validator');
+const { evaluatePolicyCompliance } = require('../../config/legalPolicies.config');
 
 exports.handler = async (event) => {
     try {
@@ -63,6 +64,9 @@ exports.handler = async (event) => {
         // Update last login timestamp
         await dynamoService.updateLastLogin(dbUser.userId);
 
+        // Evaluate policy compliance status
+        const compliance = evaluatePolicyCompliance(dbUser.policyConsent);
+
         // Return tokens and user information
         return response.success({
             message: 'Login successful',
@@ -82,12 +86,33 @@ exports.handler = async (event) => {
                 status: dbUser.status,
                 emailVerified: dbUser.emailVerified,
                 profileCompleted: dbUser.profileCompleted,
+                requiresPolicyAcceptance: !compliance.compliant,
+                policyConsent: dbUser.policyConsent || null,
+                marketingPreferences: dbUser.marketingPreferences || null,
                 lastLoginAt: new Date().toISOString()
             }
         });
 
     } catch (err) {
         console.error('Login error:', err);
+
+        // Check if user exists but account is pending invitation activation
+        if (event.body) {
+            try {
+                const body = JSON.parse(event.body);
+                if (body.email) {
+                    const sanitizedEmail = body.email.toLowerCase().trim();
+                    const checkUser = await dynamoService.getUserByEmail(sanitizedEmail);
+                    if (checkUser && (checkUser.status === 'pending_activation' || checkUser.invitationStatus === 'sent')) {
+                        return response.error(
+                            'Your account is pending activation. Please check your invitation email or use the activation link provided by your property manager.',
+                            403,
+                            { code: 'ACCOUNT_PENDING_ACTIVATION', email: sanitizedEmail }
+                        );
+                    }
+                }
+            } catch (_) {}
+        }
 
         // Return generic error for security (don't reveal if user exists)
         return response.error('Invalid credentials', 401);

@@ -28,7 +28,7 @@ exports.getAccountCreatedTemplate = ({ name, email, dashboardUrl }) => {
         Your property management account associated with <strong>${escapeHtml(email)}</strong> has been initialized successfully.
       </p>
       
-      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; padding: 20px; border-radius: 8px; margin: 24px 0;">
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #16a34a; padding: 20px; border-radius: 8px; margin: 24px 0;">
         <h3 style="margin: 0 0 10px 0; font-size: 15px; font-weight: 600; color: #0f172a;">What's next?</h3>
         <ul style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.6;">
           <li>Add and configure your PG/Hostel properties, floors, and rooms.</li>
@@ -48,7 +48,7 @@ exports.getAccountCreatedTemplate = ({ name, email, dashboardUrl }) => {
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: dashboardUrl || 'https://gobanqo.com/login', 
+            actionUrl: dashboardUrl || (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/login` : 'http://localhost:5173/login'), 
             actionText: 'Access Your Dashboard', 
             footerText: 'GoBanqo Account & Security Platform' 
         }) 
@@ -81,7 +81,7 @@ exports.getEmailVerifiedTemplate = ({ name }) => {
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/login', 
+            actionUrl: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/login` : 'http://localhost:5173/login', 
             actionText: 'Log In Now', 
             footerText: 'GoBanqo Identity Services' 
         }) 
@@ -98,7 +98,7 @@ exports.getLoginOtpTemplate = ({ otpCode }) => {
       </p>
       
       <div style="background-color: #f1f5f9; border: 2px dashed #cbd5e1; padding: 24px; text-align: center; border-radius: 12px; margin: 28px 0;">
-        <span style="font-size: 36px; font-weight: 800; color: #4f46e5; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">${escapeHtml(otpCode)}</span>
+        <span style="font-size: 36px; font-weight: 800; color: #16a34a; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">${escapeHtml(otpCode)}</span>
       </div>
 
       <div style="background-color: #fffbeb; border: 1px solid #fef3c7; padding: 14px; border-radius: 6px; margin-bottom: 20px;">
@@ -171,13 +171,14 @@ exports.getPasswordChangedTemplate = ({ name }) => {
         </p>
       </div>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/support` : 'http://localhost:5173/support';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/support', 
+            actionUrl: targetUrl, 
             actionText: 'Contact Support', 
             footerText: 'GoBanqo Security Platform' 
         }) 
@@ -188,29 +189,44 @@ exports.getPasswordChangedTemplate = ({ name }) => {
 // TENANT MANAGEMENT & ONBOARDING TEMPLATES
 // ==========================================
 
-exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, roomNumber, bedNumber, rentAmount, activationUrl, expiresHours = 2160 }) => {
-    const subject = `🎉 Activate Your Account — Welcome to ${propertyName} on GoBanqo`;
-    const preheader = `You've been invited to ${propertyName} by ${ownerName}. Activate your account to set up your password and access your tenant dashboard.`;
+exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, roomNumber, bedNumber, rentAmount, activationUrl, expiresHours = 2160, frontendUrl }) => {
+    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const targetActionUrl = activationUrl || `${baseFrontend}/activate`;
+    const displayOwnerName = ownerName || propertyName || 'Property Owner';
+
+    const subject = `🎉 Activate Your Account & Complete Profile — Welcome to ${propertyName} on GoBanqo`;
+    const preheader = `You've been added to ${propertyName} by ${displayOwnerName}. Activate your account to set up your password and complete your resident profile.`;
 
     const expireText = expiresHours >= 720 ? '3 months (90 days)' : `${expiresHours} hours`;
 
     const contentHtml = `
     <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 0;">Welcome, ${escapeHtml(tenantName || 'Tenant')}!</h2>
     <p style="font-size: 15px; color: #334155; line-height: 1.6;">
-        <strong>${escapeHtml(ownerName || 'Your Property Owner')}</strong> has added you as a resident at <strong>${escapeHtml(propertyName)}</strong> on GoBanqo.
+        <strong>${escapeHtml(displayOwnerName)}</strong> has added you as a resident at <strong>${escapeHtml(propertyName)}</strong> on GoBanqo.
     </p>
     
-    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #4f46e5; padding: 20px; border-radius: 8px; margin: 24px 0;">
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #16a34a; padding: 20px; border-radius: 8px; margin: 24px 0;">
       <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 700; color: #0f172a;">Tenancy Summary</h3>
       <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Property:</strong> ${escapeHtml(propertyName)}</p>
       ${roomNumber ? `<p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Room:</strong> ${escapeHtml(roomNumber)} ${bedNumber ? `(Bed ${escapeHtml(bedNumber)})` : ''}</p>` : ''}
       ${rentAmount ? `<p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Monthly Rent:</strong> ${formatCurrency(rentAmount)}</p>` : ''}
-      <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Owner / Manager:</strong> ${escapeHtml(ownerName)}</p>
+      <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Owner / Manager:</strong> ${escapeHtml(displayOwnerName)}</p>
     </div>
 
-    <p style="font-size: 15px; color: #334155; line-height: 1.6;">
-        To activate your account, verify your email address, and choose your personal password, click the button below:
+    <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
+        To activate your account, verify your email address, and complete your resident profile details, click the button or link below:
     </p>
+
+    <!-- Prominent Button & Direct Link Fallback Inline -->
+    <div style="text-align: center; margin: 24px 0; padding: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px;">
+      <a href="${targetActionUrl}" target="_blank" style="background-color: #16a34a; background-image: linear-gradient(135deg, #16a34a 0%, #15803d 100%); color: #ffffff; display: inline-block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 700; line-height: 48px; text-align: center; text-decoration: none; padding: 0 32px; min-width: 220px; border-radius: 8px; box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);">
+        Activate Account & Complete Profile
+      </a>
+      <p style="font-size: 13px; color: #334155; margin: 16px 0 0 0; word-break: break-all; line-height: 1.5;">
+        Direct Profile Completion Link:<br/>
+        <a href="${targetActionUrl}" target="_blank" style="color: #16a34a; text-decoration: underline; font-weight: 600;">${targetActionUrl}</a>
+      </p>
+    </div>
 
     <div style="background-color: #fffbeb; border: 1px solid #fef3c7; padding: 14px; border-radius: 6px; margin: 24px 0;">
       <p style="margin: 0; font-size: 13px; color: #92400e; text-align: center;">
@@ -225,16 +241,35 @@ exports.getTenantInvitationTemplate = ({ tenantName, ownerName, propertyName, ro
             title: subject,
             preheader,
             contentHtml,
-            actionUrl: activationUrl,
-            actionText: 'Activate Your Account',
-            footerText: `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo Identity Platform`
+            actionUrl: targetActionUrl,
+            actionText: 'Activate Account & Complete Profile',
+            footerText: `Sent on behalf of ${escapeHtml(displayOwnerName)} via GoBanqo Identity Platform`
         })
     };
 };
 
-exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({ tenantName, ownerName, propertyName, roomNumber, ownerContact, rentAmount, rentDueDay, leaseEndDate, rules }) => {
+exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({
+    tenantName,
+    ownerName,
+    propertyName,
+    roomNumber,
+    bedNumber,
+    ownerContact,
+    rentAmount,
+    rentDueDay,
+    leaseEndDate,
+    rules,
+    activationUrl,
+    loginUrl,
+    onboardingUrl,
+    frontendUrl
+}) => {
     const subject = `🎉 Welcome to ${propertyName} — GoBanqo`;
     const preheader = `Welcome aboard to ${propertyName}! Here are your residency and room details.`;
+
+    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const targetActionUrl = activationUrl || onboardingUrl || loginUrl || `${baseFrontend}/login`;
+    const actionBtnText = (activationUrl || onboardingUrl) ? 'Activate Account & Set Password' : 'Log In to Tenant App';
 
     const rulesHtml = rules && Array.isArray(rules) && rules.length > 0
         ? `<p style="margin: 12px 0 6px 0; font-weight: 700; color: #1e293b;">House Rules:</p><ul style="margin: 4px 0 0 20px; padding: 0; color: #475569;">${rules.map(r => `<li style="margin: 4px 0;">${escapeHtml(r)}</li>`).join('')}</ul>`
@@ -244,9 +279,9 @@ exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({ tenantName, o
     <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 0;">Welcome, ${escapeHtml(tenantName)}!</h2>
     <p style="font-size: 15px; color: #334155; line-height: 1.6;">We're excited to welcome you to <strong>${escapeHtml(propertyName)}</strong>. Below is a summary of your tenancy configuration:</p>
     
-    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #166534; padding: 20px; border-radius: 8px; margin: 24px 0;">
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; padding: 20px; border-radius: 8px; margin: 24px 0;">
       <p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Property:</strong> ${escapeHtml(propertyName)}</p>
-      ${roomNumber ? `<p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Room / Bed:</strong> ${escapeHtml(roomNumber)}</p>` : ''}
+      ${roomNumber ? `<p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Room / Bed:</strong> Room ${escapeHtml(roomNumber)} ${bedNumber ? `(Bed ${escapeHtml(bedNumber)})` : ''}</p>` : ''}
       <p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Monthly Rent:</strong> ${formatCurrency(rentAmount)}</p>
       <p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Rent Due Schedule:</strong> ${rentDueDay ? `${rentDueDay}th of every month` : '1st of every month'}</p>
       ${leaseEndDate ? `<p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Lease End Date:</strong> ${escapeHtml(new Date(leaseEndDate).toLocaleDateString('en-IN'))}</p>` : ''}
@@ -254,6 +289,20 @@ exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({ tenantName, o
       ${ownerContact ? `<p style="margin: 6px 0; font-size: 14px; color: #1e293b;"><strong>Contact Phone:</strong> ${escapeHtml(ownerContact)}</p>` : ''}
       ${rulesHtml}
     </div>
+
+    ${(activationUrl || onboardingUrl) ? `
+    <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; padding: 16px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 14px; color: #1e3a8a; font-weight: 600;">
+        🔑 First time logging in? Click the button below to activate your account and choose your password.
+      </p>
+    </div>
+    ` : `
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #16a34a; padding: 16px; border-radius: 8px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 14px; color: #14532d; font-weight: 600;">
+        📱 You can log in anytime using your registered email address to access rent details, receipts, and maintenance support.
+      </p>
+    </div>
+    `}
 
     <p style="font-size: 14px; color: #64748b; line-height: 1.5;">You can track rent payments, download receipts, and log maintenance tickets through your Tenant PWA.</p>
     <p style="font-size: 14px; color: #334155; margin-top: 24px;">Warm regards,<br/><strong>${escapeHtml(propertyName)} Management</strong></p>
@@ -266,14 +315,17 @@ exports.getWelcomeTemplate = exports.getTenantCreatedTemplate = ({ tenantName, o
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
-            actionText: 'Open Tenant App', 
+            actionUrl: targetActionUrl, 
+            actionText: actionBtnText, 
             footerText 
         }) 
     };
 };
 
-exports.getTenantAssignedTemplate = ({ tenantName, propertyName, roomNumber, bedNumber, moveInDate }) => {
+exports.getTenantAssignedTemplate = ({ tenantName, propertyName, roomNumber, bedNumber, moveInDate, loginUrl, frontendUrl }) => {
+    const baseFrontend = frontendUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const targetActionUrl = loginUrl || `${baseFrontend}/login`;
+
     const subject = `🏠 Room Allocation Confirmed — ${propertyName}`;
     const preheader = `You have been assigned Room ${roomNumber} at ${propertyName}.`;
     const contentHtml = `
@@ -294,8 +346,8 @@ exports.getTenantAssignedTemplate = ({ tenantName, propertyName, roomNumber, bed
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
-            actionText: 'View Room Details', 
+            actionUrl: targetActionUrl, 
+            actionText: 'Log In to Tenant App', 
             footerText: `Sent via GoBanqo on behalf of ${escapeHtml(propertyName)}` 
         }) 
     };
@@ -377,13 +429,14 @@ exports.getRentReminderTemplate = ({ tenantName, ownerName, propertyName, roomNu
     `;
 
     const footerText = `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'Pay Rent / View Details', 
             footerText 
         }) 
@@ -416,13 +469,14 @@ exports.getOverdueReminderTemplate = ({ tenantName, ownerName, propertyName, roo
     `;
 
     const footerText = `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'Settle Payment Now', 
             footerText 
         }) 
@@ -462,13 +516,14 @@ exports.getPaymentReceiptTemplate = exports.getPaymentReceivedTemplate = ({ tena
     `;
 
     const footerText = `Sent on behalf of ${escapeHtml(ownerName || propertyName)} via GoBanqo`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'View Full Receipt', 
             footerText 
         }) 
@@ -490,13 +545,14 @@ exports.getPaymentFailedTemplate = ({ tenantName, propertyName, rentAmount, reas
       
       <p style="font-size: 14px; color: #475569;">Please retry using an alternative payment method or contact management.</p>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'Retry Payment', 
             footerText: 'GoBanqo Billing Platform' 
         }) 
@@ -553,13 +609,14 @@ exports.getComplaintCreatedTemplate = exports.getTenantRequestAlertTemplate = ({
     `;
 
     const footerText = `GoBanqo Maintenance Ticket System`;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/complaints` : 'http://localhost:5173/complaints';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/complaints', 
+            actionUrl: targetUrl, 
             actionText: 'Review Maintenance Ticket', 
             footerText 
         }) 
@@ -579,13 +636,14 @@ exports.getComplaintUpdatedTemplate = ({ tenantName, propertyName, requestTitle,
         <p style="margin: 0; color: #0369a1; font-size: 14px;"><strong>Manager Notes:</strong> ${escapeHtml(resolutionNotes)}</p>
       </div>` : ''}
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/tenant/dashboard` : 'http://localhost:5173/tenant/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/tenant/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'View Ticket Status', 
             footerText: `Sent on behalf of ${escapeHtml(propertyName)}` 
         }) 
@@ -615,13 +673,14 @@ exports.getPlanChangedTemplate = ({ ownerName, planName, propertyLimit }) => {
         <p style="margin: 4px 0; font-size: 14px; color: #0f172a;"><strong>Property Capacity:</strong> ${propertyLimit || 'Unlimited'}</p>
       </div>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/subscription` : 'http://localhost:5173/subscription';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/subscription', 
+            actionUrl: targetUrl, 
             actionText: 'Manage Subscription', 
             footerText: 'GoBanqo Subscription Platform' 
         }) 
@@ -642,13 +701,14 @@ exports.getTrialEndingTemplate = ({ ownerName, daysRemaining, upgradeUrl }) => {
         </p>
       </div>
     `;
+    const targetUrl = upgradeUrl || (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/subscription` : 'http://localhost:5173/subscription');
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: upgradeUrl || 'https://gobanqo.com/subscription', 
+            actionUrl: targetUrl, 
             actionText: 'Upgrade Plan Now', 
             footerText: 'GoBanqo Subscription Platform' 
         }) 
@@ -696,13 +756,14 @@ exports.getOwnerDailySummaryTemplate = ({ ownerName, totalProperties, activeTena
         </table>
       </div>
     `;
+    const targetUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/dashboard` : 'http://localhost:5173/dashboard';
     return { 
         subject, 
         html: renderLayout({ 
             title: subject, 
             preheader, 
             contentHtml, 
-            actionUrl: 'https://gobanqo.com/dashboard', 
+            actionUrl: targetUrl, 
             actionText: 'View Owner Dashboard', 
             footerText: 'GoBanqo Portfolio Analytics Platform' 
         }) 

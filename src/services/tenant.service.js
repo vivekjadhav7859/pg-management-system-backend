@@ -543,3 +543,35 @@ exports.releaseBedByTenant = async (tenantId) => {
         throw error;
     }
 };
+
+/**
+ * Mask PII fields (Aadhaar, PAN, Bank Details) in compliance with Indian privacy regulations (DPDP Act & RBI/UIDAI guidelines)
+ */
+exports.maskPiiDetails = (tenant) => {
+    if (!tenant) return tenant;
+    const masked = { ...tenant };
+
+    if (masked.kycDocuments) {
+        const docs = { ...masked.kycDocuments };
+        if (docs.aadhaarNumber && typeof docs.aadhaarNumber === 'string') {
+            const clean = docs.aadhaarNumber.replace(/\D/g, '');
+            docs.aadhaarNumber = clean.length >= 4 ? `XXXX-XXXX-${clean.slice(-4)}` : 'XXXX-XXXX-XXXX';
+        }
+        if (docs.panNumber && typeof docs.panNumber === 'string') {
+            const clean = docs.panNumber.trim();
+            docs.panNumber = clean.length >= 4 ? `XXXXX${clean.slice(-4)}X` : 'XXXXX0000X';
+        }
+        masked.kycDocuments = docs;
+    }
+
+    if (masked.bankDetails) {
+        const bank = { ...masked.bankDetails };
+        if (bank.accountNumber && typeof bank.accountNumber === 'string') {
+            const clean = bank.accountNumber.replace(/\D/g, '');
+            bank.accountNumber = clean.length >= 4 ? `XXXX-XXXX-${clean.slice(-4)}` : 'XXXX-XXXX';
+        }
+        masked.bankDetails = bank;
+    }
+
+    return masked;
+};

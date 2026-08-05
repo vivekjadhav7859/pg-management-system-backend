@@ -70,6 +70,12 @@ const FUNCTIONS = [
   { name: 'updateReminderSettings', src: 'src/functions/financial/updateReminderSettings.js' },
   { name: 'getNotificationLogs',  src: 'src/functions/notifications/getNotificationLogs.js' },
   { name: 'sesEventHandler',      src: 'src/functions/notifications/sesEventHandler.js' },
+  // privacy & security
+  { name: 'getConsent',           src: 'src/functions/privacy/getConsent.js' },
+  { name: 'updateConsent',        src: 'src/functions/privacy/updateConsent.js' },
+  { name: 'exportData',           src: 'src/functions/privacy/exportData.js' },
+  { name: 'requestErasure',       src: 'src/functions/privacy/requestErasure.js' },
+  { name: 'getAuditLogs',         src: 'src/functions/security/getAuditLogs.js' },
 ];
 
 const MIN_HEALTHY_BYTES = 2_000; // 2 KB — broken zips are ~895 bytes, lightweight handlers are ~3.4 KB

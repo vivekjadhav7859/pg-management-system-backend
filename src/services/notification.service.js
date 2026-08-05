@@ -479,6 +479,28 @@ class NotificationService {
             throw err;
         }
     }
+
+    /**
+     * Fetch in-app user notifications from NOTIFICATION_TABLE
+     */
+    async getNotifications(userId, limit = 50) {
+        const NOTIFICATION_TABLE = process.env.NOTIFICATION_TABLE;
+        if (!NOTIFICATION_TABLE || !userId) return [];
+        try {
+            const result = await dynamodb.query({
+                TableName: NOTIFICATION_TABLE,
+                IndexName: 'UserIdIndex',
+                KeyConditionExpression: 'userIdIndex = :userId',
+                ExpressionAttributeValues: { ':userId': userId },
+                Limit: limit,
+                ScanIndexForward: false
+            }).promise();
+            return result.Items || [];
+        } catch (err) {
+            console.error('[NotificationService.getNotifications] Error:', err);
+            return [];
+        }
+    }
 }
 
 module.exports = new NotificationService();
